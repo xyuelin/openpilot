@@ -195,7 +195,7 @@ void MapWindow::updateState(const UIState &s) {
       velocity_filter.update(std::max(10.0, locationd_velocity.getValue()[0]));
     }
 }
-
+  // Credit to jakethesnake420
   if (loaded_once && (sm.rcv_frame("uiPlan") != model_rcv_frame)) {
     auto locationd_location = sm["liveLocationKalman"].getLiveLocationKalman();
     auto model_path = model_to_collection(locationd_location.getCalibratedOrientationECEF(), locationd_location.getPositionECEF(), sm["uiPlan"].getUiPlan().getPosition());
