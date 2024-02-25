@@ -307,7 +307,17 @@ void MapWindow::initializeGL() {
 
   m_map->setMargins({0, 350, 0, 50});
   m_map->setPitch(MIN_PITCH);
-  m_map->setStyleUrl("mapbox://styles/commaai/clkqztk0f00ou01qyhsa5bzpj");
+  //Map Styling credit to OPKR
+  QString MAPBOX_STYLE = QString::fromStdString(Params().get("MapStyle"));
+  if (MAPBOX_STYLE == "0") {
+    m_map->setStyleUrl("mapbox://styles/commaai/clkqztk0f00ou01qyhsa5bzpj"); // comma
+  } else if (MAPBOX_STYLE == "1") {
+    m_map->setStyleUrl("mapbox://styles/mapbox/navigation-night-v1"); // mapbox nav dark
+  } else if (MAPBOX_STYLE == "2") {
+    m_map->setStyleUrl("mapbox://styles/mike854/clt0hm8mw01ok01p4blkr27jp"); // sat hybrid
+  } else {
+    m_map->setStyleUrl("mapbox://styles/commaai/clkqztk0f00ou01qyhsa5bzpj"); // else comma
+  }
 
   QObject::connect(m_map.data(), &QMapLibre::Map::mapChanged, [=](QMapLibre::Map::MapChange change) {
     // set global animation duration to 0 ms so visibility changes are instant
