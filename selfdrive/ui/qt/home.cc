@@ -89,6 +89,7 @@ void HomeWindow::showDriverView(bool show, bool started) {
   } else {
     if (started) {
       slayout->setCurrentWidget(onroad);
+      sidebar->setVisible(params.getBool("Sidebar"));
     } else {
       slayout->setCurrentWidget(home);
       sidebar->setVisible(show == false);
@@ -101,6 +102,7 @@ void HomeWindow::mousePressEvent(QMouseEvent* e) {
   if ((onroad->isVisible() || body->isVisible()) && (!sidebar->isVisible() || e->x() > sidebar->width())) {
     sidebar->setVisible(!sidebar->isVisible() && !onroad->isMapVisible());
     uiState()->scene.map_open = onroad->isMapVisible();
+    params.putBool("Sidebar", sidebar->isVisible());
   }
 }
 
