@@ -20,7 +20,7 @@ class CarState(CarStateBase):
     self.vehicle_sensors_valid = False
     self.unsupported_platform = False
 
-  def update(self, cp, cp_cam, conditional_experimental_mode, frogpilot_variables):
+  def update(self, cp, cp_cam, frogpilot_variables):
     ret = car.CarState.new_message()
 
     # Ford Q3 hybrid variants experience a bug where a message from the PCM sends invalid checksums,
@@ -54,7 +54,7 @@ class CarState(CarStateBase):
     ret.steeringPressed = self.update_steering_pressed(abs(ret.steeringTorque) > CarControllerParams.STEER_DRIVER_ALLOWANCE, 5)
     ret.steerFaultTemporary = cp.vl["EPAS_INFO"]["EPAS_Failure"] == 1
     ret.steerFaultPermanent = cp.vl["EPAS_INFO"]["EPAS_Failure"] in (2, 3)
-    # ret.espDisabled = False  # TODO: find traction control signal
+    ret.espDisabled = cp.vl["Cluster_Info1_FD1"]["DrvSlipCtlMde_D_Rq"] != 0  # 0 is default mode
 
     if self.CP.carFingerprint in CANFD_CAR:
       # this signal is always 0 on non-CAN FD cars

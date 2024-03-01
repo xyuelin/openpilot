@@ -267,6 +267,18 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   });
   addItem(deleteFootageBtn);
 
+  // Delete long term toggle storage button
+  auto deleteStorageParamsBtn = new ButtonControl(tr("Delete Toggle Storage Data"), tr("DELETE"), tr("This button provides a swift and secure way to permanently delete all "
+    "long term stored toggle settings. Ideal for maintaining privacy or freeing up space.")
+  );
+  connect(deleteStorageParamsBtn, &ButtonControl::clicked, [this]() {
+    if (!ConfirmationDialog::confirm(tr("Are you sure you want to permanently delete all of your long term toggle settings storage?"), tr("Delete"), this)) return;
+    std::thread([&] {
+      std::system("rm -rf /persist/comma/params");
+    }).detach();
+  });
+  addItem(deleteStorageParamsBtn);
+
   // Panda flashing button
   auto flashPandaBtn = new ButtonControl(tr("Flash Panda"), tr("FLASH"), "Use this button to troubleshoot and update the Panda device's firmware.");
   connect(flashPandaBtn, &ButtonControl::clicked, [this]() {
@@ -290,9 +302,15 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     process.setWorkingDirectory("/data/openpilot/panda");
     process.start("/bin/sh", QStringList{"-c", "pkill -f boardd; PYTHONPATH=.. python -c \"from panda import Panda; Panda().flash()\""});
     process.waitForFinished();
-    Hardware::reboot();
+    Hardware::soft_reboot();
   });
   addItem(flashPandaBtn);
+
+  auto lockDoorsButton = new ButtonControl(tr("Lock Doors"), tr("LOCK"), "Use this button to lock the doors on Toyota/Lexus vehicles.");
+  connect(lockDoorsButton, &ButtonControl::clicked, []() {
+    system("python ../../../../frogpilot/functions/lock_doors.py --lock");
+  });
+  addItem(lockDoorsButton);
 
   QObject::connect(uiState(), &UIState::offroadTransition, [=](bool offroad) {
     for (auto btn : findChildren<ButtonControl *>()) {
@@ -304,15 +322,15 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   QHBoxLayout *power_layout = new QHBoxLayout();
   power_layout->setSpacing(30);
 
-  QPushButton *softreboot_btn = new QPushButton(tr("Soft Reboot"));
-  softreboot_btn->setObjectName("softreboot_btn");
-  power_layout->addWidget(softreboot_btn);
-  QObject::connect(softreboot_btn, &QPushButton::clicked, this, &DevicePanel::softreboot);
-
   QPushButton *reboot_btn = new QPushButton(tr("Reboot"));
   reboot_btn->setObjectName("reboot_btn");
   power_layout->addWidget(reboot_btn);
   QObject::connect(reboot_btn, &QPushButton::clicked, this, &DevicePanel::reboot);
+
+  QPushButton *softreboot_btn = new QPushButton(tr("Soft Reboot"));
+  softreboot_btn->setObjectName("softreboot_btn");
+  power_layout->addWidget(softreboot_btn);
+  QObject::connect(softreboot_btn, &QPushButton::clicked, this, &DevicePanel::softreboot);
 
   QPushButton *poweroff_btn = new QPushButton(tr("Power Off"));
   poweroff_btn->setObjectName("poweroff_btn");
@@ -325,7 +343,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
 
   setStyleSheet(R"(
     #softreboot_btn { height: 120px; border-radius: 15px; background-color: #e2e22c; }
-    #softreboot_btn:pressed { background-color: #ffe224; }  
+    #softreboot_btn:pressed { background-color: #ffe224; }
     #reboot_btn { height: 120px; border-radius: 15px; background-color: #e2872c; }
     #reboot_btn:pressed { background-color: #ff9724; }
     #poweroff_btn { height: 120px; border-radius: 15px; background-color: #E22C2C; }
@@ -433,11 +451,14 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
   sidebar_layout->addSpacing(10);
   sidebar_layout->addWidget(close_btn, 0, Qt::AlignRight);
   QObject::connect(close_btn, &QPushButton::clicked, [this]() {
-    if (frogPilotTogglesOpen) {
-      frogPilotTogglesOpen = false;
-      this->closeParentToggle();
+    if (parentToggleOpen) {
+      if (subParentToggleOpen) {
+        closeSubParentToggle();
+      } else {
+        closeParentToggle();
+      }
     } else {
-      this->closeSettings();
+      closeSettings();
     }
   });
 
@@ -451,12 +472,16 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
   QObject::connect(toggles, &TogglesPanel::updateMetric, this, &SettingsWindow::updateMetric);
 
   FrogPilotControlsPanel *frogpilotControls = new FrogPilotControlsPanel(this);
-  QObject::connect(frogpilotControls, &FrogPilotControlsPanel::closeParentToggle, this, [this]() {frogPilotTogglesOpen = false;});
-  QObject::connect(frogpilotControls, &FrogPilotControlsPanel::openParentToggle, this, [this]() {frogPilotTogglesOpen = true;});
+  QObject::connect(frogpilotControls, &FrogPilotControlsPanel::closeSubParentToggle, this, [this]() {subParentToggleOpen = false;});
+  QObject::connect(frogpilotControls, &FrogPilotControlsPanel::openSubParentToggle, this, [this]() {subParentToggleOpen = true;});
+  QObject::connect(frogpilotControls, &FrogPilotControlsPanel::closeParentToggle, this, [this]() {parentToggleOpen = false;});
+  QObject::connect(frogpilotControls, &FrogPilotControlsPanel::openParentToggle, this, [this]() {parentToggleOpen = true;});
 
   FrogPilotVisualsPanel *frogpilotVisuals = new FrogPilotVisualsPanel(this);
-  QObject::connect(frogpilotVisuals, &FrogPilotVisualsPanel::closeParentToggle, this, [this]() {frogPilotTogglesOpen = false;});
-  QObject::connect(frogpilotVisuals, &FrogPilotVisualsPanel::openParentToggle, this, [this]() {frogPilotTogglesOpen = true;});
+  QObject::connect(frogpilotVisuals, &FrogPilotVisualsPanel::closeSubParentToggle, this, [this]() {subParentToggleOpen = false;});
+  QObject::connect(frogpilotVisuals, &FrogPilotVisualsPanel::openSubParentToggle, this, [this]() {subParentToggleOpen = true;});
+  QObject::connect(frogpilotVisuals, &FrogPilotVisualsPanel::closeParentToggle, this, [this]() {parentToggleOpen = false;});
+  QObject::connect(frogpilotVisuals, &FrogPilotVisualsPanel::openParentToggle, this, [this]() {parentToggleOpen = true;});
 
   QList<QPair<QString, QWidget *>> panels = {
     {tr("Device"), device},
@@ -503,7 +528,7 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
       QScrollBar *scrollbar = panel_frame->verticalScrollBar();
 
       QObject::connect(scrollbar, &QScrollBar::valueChanged, this, [this](int value) {
-        if (!frogPilotTogglesOpen) {
+        if (!parentToggleOpen) {
           previousScrollPosition = value;
         }
       });

@@ -158,7 +158,7 @@ typedef struct UIScene {
   QPolygonF road_edge_vertices[2];
 
   // lead
-  QPointF lead_vertices[2];
+  QPointF lead_vertices[4];
 
   // DMoji state
   float driver_pose_vals[3];
@@ -188,29 +188,41 @@ typedef struct UIScene {
   bool disable_smoothing_mtsc;
   bool disable_smoothing_vtsc;
   bool driver_camera;
+  bool dynamic_path_width;
   bool enabled;
   bool experimental_mode;
   bool experimental_mode_via_screen;
   bool fahrenheit;
   bool fps_counter;
   bool full_map;
+  bool hide_alerts;
+  bool hide_aol_status_bar;
+  bool hide_cem_status_bar;
+  bool hide_lead_marker;
+  bool hide_map_icon;
+  bool hide_max_speed;
   bool hide_speed;
   bool hide_speed_ui;
   bool lead_info;
   bool map_open;
   bool model_ui;
   bool numerical_temp;
+  bool pedals_on_ui;
   bool personalities_via_screen;
   bool random_events;
   bool reverse_cruise;
   bool reverse_cruise_ui;
+  bool right_hand_drive;
   bool road_name_ui;
   bool rotating_wheel;
+  bool screen_recorder;
   bool show_driver_camera;
   bool show_slc_offset;
   bool show_slc_offset_ui;
+  bool speed_limit_changed;
   bool speed_limit_controller;
   bool speed_limit_overridden;
+  bool standstill;
   bool tethering_enabled;
   bool turn_signal_left;
   bool turn_signal_right;
@@ -220,6 +232,7 @@ typedef struct UIScene {
   bool vtsc_controlling_curve;
   bool wheel_speed;
 
+  float acceleration;
   float adjusted_cruise;
   float lane_line_width;
   float lane_width_left;
@@ -230,6 +243,7 @@ typedef struct UIScene {
   float speed_limit;
   float speed_limit_offset;
   float speed_limit_overridden_speed;
+  float unconfirmed_speed_limit;
 
   int bearing_deg;
   int camera_view;
@@ -241,9 +255,13 @@ typedef struct UIScene {
   int custom_icons;
   int custom_signals;
   int desired_follow;
+  int map_style;
   int obstacle_distance;
   int obstacle_distance_stock;
   int screen_brightness;
+  int screen_brightness_onroad;
+  int screen_timeout;
+  int screen_timeout_onroad;
   int steering_angle_deg;
   int stopped_equivalence;
   int wheel_icon;
@@ -327,7 +345,7 @@ signals:
   void interactiveTimeout();
 
 public slots:
-  void resetInteractiveTimeout(int timeout = -1);
+  void resetInteractiveTimeout(int timeout = -1, int timeout_onroad = -1);
   void update(const UIState &s);
 };
 

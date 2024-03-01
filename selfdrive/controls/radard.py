@@ -8,7 +8,7 @@ import capnp
 from cereal import messaging, log, car
 from openpilot.common.numpy_fast import interp
 from openpilot.common.params import Params
-from openpilot.common.realtime import Ratekeeper, Priority, config_realtime_process
+from openpilot.common.realtime import DT_CTRL, Ratekeeper, Priority, config_realtime_process
 from openpilot.common.swaglog import cloudlog
 
 from openpilot.common.simple_kalman import KF1D
@@ -107,6 +107,14 @@ class Track:
       "radarTrackId": self.identifier,
     }
 
+  def get_lane_position(self) -> str:
+    if self.yRel > 0 and self.vRel > 5.0:
+      return 'left'
+    elif self.yRel < 0 and self.vRel > 5.0:
+      return 'right'
+    else:
+      return 'front'
+
   def potential_low_speed_lead(self, v_ego: float):
     # stop for stuff in front of you and low speed, even without model confirmation
     # Radar points closer than 0.75, are almost always glitches on toyota radars
@@ -191,6 +199,31 @@ def get_lead(v_ego: float, ready: bool, tracks: Dict[int, Track], lead_msg: capn
 
   return lead_dict
 
+def get_adjacent_lead(v_ego: float, ready: bool, tracks: Dict[int, Track], lead_msg: capnp._DynamicStructReader,
+                      model_v_ego: float, left: bool) -> Dict[str, Any]:
+  # Determine leads, this is where the essential logic happens
+  if len(tracks) > 0 and ready and lead_msg.prob != 0:
+    # Filter tracks based on the specified lane position
+    if left:
+      lane_tracks = {tid: tr for tid, tr in tracks.items() if tr.get_lane_position() == 'left'}
+    else:
+      lane_tracks = {tid: tr for tid, tr in tracks.items() if tr.get_lane_position() == 'right'}
+
+    # Match vision to track for the filtered tracks
+    if lane_tracks:
+      track = match_vision_to_track(v_ego, lead_msg, lane_tracks)
+    else:
+      track = None
+  else:
+    track = None
+
+  lead_dict = {'status': False}
+  if track is not None:
+    lead_dict = track.get_RadarState(lead_msg.prob)
+  elif (track is None) and ready and (lead_msg.prob > .5):
+    lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego)
+
+  return lead_dict
 
 class RadarD:
   def __init__(self, radar_ts: float, delay: int = 0):
@@ -201,6 +234,7 @@ class RadarD:
 
     self.v_ego = 0.0
     self.v_ego_hist = deque([0.0], maxlen=delay+1)
+    self.last_v_ego_frame = -1
 
     self.radar_state: Optional[capnp._DynamicStructBuilder] = None
     self.radar_state_valid = False
@@ -208,6 +242,7 @@ class RadarD:
     self.ready = False
 
   def update(self, sm: messaging.SubMaster, rr: Optional[car.RadarData]):
+    self.ready = sm.seen['modelV2']
     self.current_time = 1e-9*max(sm.logMonoTime.values())
 
     radar_points = []
@@ -216,11 +251,10 @@ class RadarD:
       radar_points = rr.points
       radar_errors = rr.errors
 
-    if sm.updated['carState']:
+    if sm.recv_frame['carState'] != self.last_v_ego_frame:
       self.v_ego = sm['carState'].vEgo
       self.v_ego_hist.append(self.v_ego)
-    if sm.updated['modelV2']:
-      self.ready = True
+      self.last_v_ego_frame = sm.recv_frame['carState']
 
     ar_pts = {}
     for pt in radar_points:
@@ -259,6 +293,9 @@ class RadarD:
       self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, low_speed_override=True)
       self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego, low_speed_override=False)
 
+      self.radar_state.leadLeft = get_adjacent_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, left=True)
+      self.radar_state.leadRight = get_adjacent_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego, left=False)
+
   def publish(self, pm: messaging.PubMaster, lag_ms: float):
     assert self.radar_state is not None
 
@@ -282,7 +319,7 @@ class RadarD:
 
 
 # fuses camera and radar data for best lead detection
-def radard_thread(sm: Optional[messaging.SubMaster] = None, pm: Optional[messaging.PubMaster] = None, can_sock: Optional[messaging.SubSocket] = None):
+def main():
   config_realtime_process(5, Priority.CTRL_LOW)
 
   # wait for stats about the car to come in from controls
@@ -296,12 +333,9 @@ def radard_thread(sm: Optional[messaging.SubMaster] = None, pm: Optional[messagi
   RadarInterface = importlib.import_module(f'selfdrive.car.{CP.carName}.radar_interface').RadarInterface
 
   # *** setup messaging
-  if can_sock is None:
-    can_sock = messaging.sub_sock('can')
-  if sm is None:
-    sm = messaging.SubMaster(['modelV2', 'carState'], ignore_avg_freq=['modelV2', 'carState'])  # Can't check average frequency, since radar determines timing
-  if pm is None:
-    pm = messaging.PubMaster(['radarState', 'liveTracks'])
+  can_sock = messaging.sub_sock('can')
+  sm = messaging.SubMaster(['modelV2', 'carState'], frequency=int(1./DT_CTRL))
+  pm = messaging.PubMaster(['radarState', 'liveTracks'])
 
   RI = RadarInterface(CP)
 
@@ -311,20 +345,14 @@ def radard_thread(sm: Optional[messaging.SubMaster] = None, pm: Optional[messagi
   while 1:
     can_strings = messaging.drain_sock_raw(can_sock, wait_for_one=True)
     rr = RI.update(can_strings)
-
+    sm.update(0)
     if rr is None:
       continue
-
-    sm.update(0)
 
     RD.update(sm, rr)
     RD.publish(pm, -rk.remaining*1000.0)
 
     rk.monitor_time()
-
-
-def main(sm: Optional[messaging.SubMaster] = None, pm: Optional[messaging.PubMaster] = None, can_sock: messaging.SubSocket = None):
-  radard_thread(sm, pm, can_sock)
 
 
 if __name__ == "__main__":

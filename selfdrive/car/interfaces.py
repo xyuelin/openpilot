@@ -1,6 +1,5 @@
 import json
 import os
-import time
 import numpy as np
 import tomllib
 from abc import abstractmethod, ABC
@@ -22,7 +21,8 @@ from openpilot.selfdrive.controls.lib.events import Events
 from openpilot.selfdrive.controls.lib.vehicle_model import VehicleModel
 
 from openpilot.selfdrive.frogpilot.functions.frogpilot_functions import FrogPilotFunctions
-from openpilot.selfdrive.frogpilot.functions.speed_limit_controller import SpeedLimitController
+
+params_memory = Params("/dev/shm/params")
 
 ButtonType = car.CarState.ButtonEvent.Type
 GearShifter = car.CarState.GearShifter
@@ -252,8 +252,8 @@ class CarInterfaceBase(ABC):
       eps_firmware = str(next((fw.fwVersion for fw in car_fw if fw.ecu == "eps"), ""))
       model, similarity_score = get_nn_model_path(candidate, eps_firmware)
       if model is not None:
-        Params("/dev/shm/params").put_bool("NNFFModelFuzzyMatch", similarity_score < 0.99)
-        Params("/dev/shm/params").put("NNFFModelName", candidate)
+        params_memory.put_bool("NNFFModelFuzzyMatch", similarity_score < 0.99)
+        params_memory.put("NNFFModelName", candidate)
 
     # Vehicle mass is published curb weight plus assumed payload such as a human driver; notCars have no assumed payload
     if not ret.notCar:
@@ -348,14 +348,14 @@ class CarInterfaceBase(ABC):
   def _update(self, c: car.CarControl) -> car.CarState:
     pass
 
-  def update(self, c: car.CarControl, can_strings: List[bytes], conditional_experimental_mode, frogpilot_variables) -> car.CarState:
+  def update(self, c: car.CarControl, can_strings: List[bytes], frogpilot_variables) -> car.CarState:
     # parse can
     for cp in self.can_parsers:
       if cp is not None:
         cp.update_strings(can_strings)
 
     # get CarState
-    ret = self._update(c, conditional_experimental_mode, frogpilot_variables)
+    ret = self._update(c, frogpilot_variables)
 
     ret.canValid = all(cp.can_valid for cp in self.can_parsers if cp is not None)
     ret.canTimeout = any(cp.bus_timeout for cp in self.can_parsers if cp is not None)
@@ -465,13 +465,14 @@ class RadarInterfaceBase(ABC):
     self.pts = {}
     self.delay = 0
     self.radar_ts = CP.radarTimeStep
+    self.frame = 0
     self.no_radar_sleep = 'NO_RADAR_SLEEP' in os.environ
 
   def update(self, can_strings):
-    ret = car.RadarData.new_message()
-    if not self.no_radar_sleep:
-      time.sleep(self.radar_ts)  # radard runs on RI updates
-    return ret
+    self.frame += 1
+    if (self.frame % int(100 * self.radar_ts)) == 0:
+      return car.RadarData.new_message()
+    return None
 
 
 class CarStateBase(ABC):
@@ -499,12 +500,12 @@ class CarStateBase(ABC):
 
     # FrogPilot variables
     self.fpf = FrogPilotFunctions()
-    self.slc = SpeedLimitController
 
+    self.distance_button = False
     self.distance_previously_pressed = False
     self.lkas_previously_pressed = False
 
-    self.distance_button = 0
+    self.distance_pressed_counter = 0
     self.personality_profile = self.fpf.current_personality
     self.previous_personality_profile = self.personality_profile
 

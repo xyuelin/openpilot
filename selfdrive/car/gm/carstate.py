@@ -35,7 +35,7 @@ class CarState(CarStateBase):
 
     self.display_timer = 0
 
-  def update(self, pt_cp, cam_cp, loopback_cp, conditional_experimental_mode, frogpilot_variables):
+  def update(self, pt_cp, cam_cp, loopback_cp, frogpilot_variables):
     ret = car.CarState.new_message()
 
     self.prev_cruise_buttons = self.cruise_buttons
@@ -176,8 +176,8 @@ class CarState(CarStateBase):
         self.fpf.reset_personality_changed_param()
 
       # Check if the car has a camera
-      has_camera = self.CP.networkLocation == NetworkLocation.fwdCamera 
-      has_camera &= not self.CP.flags & GMFlags.NO_CAMERA.value 
+      has_camera = self.CP.networkLocation == NetworkLocation.fwdCamera
+      has_camera &= not self.CP.flags & GMFlags.NO_CAMERA.value
       has_camera &= not self.CP.carFingerprint in (CC_ONLY_CAR)
 
       if has_camera:
@@ -214,7 +214,7 @@ class CarState(CarStateBase):
         lkas_pressed = pt_cp.vl["ASCMSteeringButton"]["LKAButton"]
 
       if lkas_pressed and not self.lkas_previously_pressed:
-        self.fpf.lkas_button_function(conditional_experimental_mode)
+        self.fpf.lkas_button_function(frogpilot_variables.conditional_experimental_mode)
       self.lkas_previously_pressed = lkas_pressed
 
     return ret

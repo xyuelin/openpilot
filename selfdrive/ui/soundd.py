@@ -6,7 +6,7 @@ import wave
 
 from typing import Dict, Optional, Tuple
 
-from cereal import car, custom, messaging
+from cereal import car, messaging
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
@@ -43,13 +43,14 @@ sound_list: Dict[int, Tuple[str, Optional[int], float]] = {
   AudibleAlert.warningImmediate: ("warning_immediate.wav", None, MAX_VOLUME),
 
   # Random Events
+  AudibleAlert.angry: ("angry.wav", 1, MAX_VOLUME),
   AudibleAlert.fart: ("fart.wav", 1, MAX_VOLUME),
   AudibleAlert.firefox: ("firefox.wav", 1, MAX_VOLUME),
   AudibleAlert.noice: ("noice.wav", 1, MAX_VOLUME),
 }
 
 def check_controls_timeout_alert(sm):
-  controls_missing = time.monotonic() - sm.rcv_time['controlsState']
+  controls_missing = time.monotonic() - sm.recv_time['controlsState']
 
   if controls_missing > CONTROLS_TIMEOUT:
     if sm['controlsState'].enabled and (controls_missing - CONTROLS_TIMEOUT) < 10:
@@ -171,6 +172,10 @@ class Soundd:
         elif self.alert_volume_control and self.current_alert in self.volume_map:
           self.current_volume = self.volume_map[self.current_alert] / 100.0
 
+        # Increase the volume for Random Events
+        elif self.current_alert in self.random_events_map:
+          self.current_volume = self.random_events_map[self.current_alert]
+
         self.get_audible_alert(sm)
 
         rk.keep_time()
@@ -182,6 +187,13 @@ class Soundd:
           self.update_frogpilot_params()
 
   def update_frogpilot_params(self):
+    self.random_events_map = {
+      AudibleAlert.angry: MAX_VOLUME,
+      AudibleAlert.fart: MAX_VOLUME,
+      AudibleAlert.firefox: MAX_VOLUME,
+      AudibleAlert.noice: MAX_VOLUME,
+    }
+
     self.alert_volume_control = self.params.get_bool("AlertVolumeControl")
 
     self.volume_map = {

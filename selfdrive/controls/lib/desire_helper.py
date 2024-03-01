@@ -1,5 +1,3 @@
-import threading
-
 from cereal import log
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.params import Params
@@ -170,16 +168,15 @@ class DesireHelper:
         self.desire = log.Desire.none
 
     if self.params_memory.get_bool("FrogPilotTogglesUpdated"):
-      updateFrogPilotParams = threading.Thread(target=self.update_frogpilot_params)
-      updateFrogPilotParams.start()
+      self.update_frogpilot_params()
 
   def update_frogpilot_params(self):
     is_metric = self.params.get_bool("IsMetric")
 
     self.nudgeless = self.params.get_bool("NudgelessLaneChange")
     self.lane_change_delay = self.params.get_int("LaneChangeTime") if self.nudgeless else 0
-    self.lane_detection = self.params.get_bool("LaneDetection") and self.nudgeless
+    self.lane_detection = self.nudgeless and self.params.get_bool("LaneDetection")
     self.lane_detection_width = self.params.get_int("LaneDetectionWidth") * (1 if is_metric else CV.FOOT_TO_METER) / 10 if self.lane_detection else 0
-    self.one_lane_change = self.params.get_bool("OneLaneChange") and self.nudgeless
+    self.one_lane_change = self.nudgeless and self.params.get_bool("OneLaneChange")
 
     self.turn_desires = self.params.get_bool("TurnDesires")

@@ -10,6 +10,7 @@ $Cxx.namespace("cereal");
 # you can rename the struct, but don't change the identifier
 struct FrogPilotCarControl @0x81c2f05a394cf4af {
   alwaysOnLateral @0 :Bool;
+  speedLimitChanged @1 :Bool;
 }
 
 struct FrogPilotDeviceState @0xaedffd8f31e7b55d {
@@ -17,14 +18,12 @@ struct FrogPilotDeviceState @0xaedffd8f31e7b55d {
   usedSpace @1 :Int16;
 }
 
-enum FrogPilotEvents @0xf35cc4560bbf6ec2 {
+struct FrogPilotNavigation @0xf35cc4560bbf6ec2 {
+  approachingIntersection @0 :Bool;
+  approachingTurn @1 :Bool;
 }
 
-struct FrogPilotNavigation @0xda96579883444c35 {
-  navigationConditionMet @0 :Bool;
-}
-
-struct FrogPilotPlan @0x80ae746ee2596b11 {
+struct FrogPilotPlan @0xda96579883444c35 {
   adjustedCruise @0 :Float64;
   conditionalExperimental @1 :Bool;
   desiredFollowDistance @2 :Int16;
@@ -38,7 +37,11 @@ struct FrogPilotPlan @0x80ae746ee2596b11 {
   slcSpeedLimit @10 :Float64;
   slcSpeedLimitOffset @11 :Float32;
   stoppedEquivalenceFactor @12 :Int16;
-  vtscControllingCurve @13 :Bool;
+  unconfirmedSlcSpeedLimit @13 :Float64;
+  vtscControllingCurve @14 :Bool;
+}
+
+struct CustomReserved4 @0x80ae746ee2596b11 {
 }
 
 struct CustomReserved5 @0xa5cd762cd951a455 {

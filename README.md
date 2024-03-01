@@ -45,7 +45,7 @@ FrogPilot is a bi-weekly updated and 100% open-sourced fork of openpilot with cl
 FrogPilot was last updated on:
 <img width="10%" align="left" src="./selfdrive/assets/img_spinner_comma.png">
 
-**February 16th, 2024**
+**March 1st, 2024**
 
 Features
 ------
@@ -199,7 +199,7 @@ As for feature requests, these are my guidelines:
 Discord
 ------
 
-[Join the FrogPilot Community Discord for easy access to updates, bug reporting, feature requests, future planned updates, and other FrogPilot related discussions!](https://discord.gg/SqrRVBmMHC)
+[Join the FrogPilot Community Discord for easy access to updates, bug reporting, feature requests, future planned updates, and other FrogPilot related discussions!](https://discord.gg/frogpilot)
 
 Donations
 ------

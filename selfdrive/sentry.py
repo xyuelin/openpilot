@@ -82,8 +82,8 @@ def init(project: SentryProject) -> bool:
   env = "release" if is_tested_branch() else "master"
 
   params = Params()
-  installed = params.get("InstallDate")
-  updated = params.get("Updated")
+  installed = params.get("InstallDate", encoding='utf-8')
+  updated = params.get("Updated", encoding='utf-8')
 
   integrations = []
   if project == SentryProject.SELFDRIVE:

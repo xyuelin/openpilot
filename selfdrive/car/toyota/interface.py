@@ -2,8 +2,9 @@ from cereal import car
 from openpilot.common.conversions import Conversions as CV
 from panda import Panda
 from panda.python import uds
+from openpilot.common.numpy_fast import interp
 from openpilot.selfdrive.car.toyota.values import Ecu, CAR, DBC, ToyotaFlags, CarControllerParams, TSS2_CAR, RADAR_ACC_CAR, NO_DSU_CAR, \
-                                        MIN_ACC_SPEED, EPS_SCALE, UNSUPPORTED_DSU_CAR, NO_STOP_TIMER_CAR, ANGLE_CONTROL_CAR
+                                        MIN_ACC_SPEED, EPS_SCALE, UNSUPPORTED_DSU_CAR, NO_STOP_TIMER_CAR, ANGLE_CONTROL_CAR, STOP_AND_GO_CAR
 from openpilot.selfdrive.car import get_safety_config
 from openpilot.selfdrive.car.disable_ecu import disable_ecu
 from openpilot.selfdrive.car.interfaces import CarInterfaceBase
@@ -16,7 +17,7 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def get_pid_accel_limits(CP, current_speed, cruise_speed, frogpilot_variables):
     if frogpilot_variables.sport_plus:
-      return CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX_PLUS
+      return CarControllerParams.ACCEL_MIN, interp(current_speed, CarControllerParams.ACCEL_MAX_PLUS_BP, CarControllerParams.ACCEL_MAX_PLUS)
     else:
       return CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX
 
@@ -48,10 +49,7 @@ class CarInterface(CarInterfaceBase):
 
     ret.stoppingControl = False  # Toyota starts braking more when it thinks you want to stop
 
-    stop_and_go = candidate in TSS2_CAR
-
     if candidate == CAR.PRIUS:
-      stop_and_go = True
       ret.wheelbase = 2.70
       ret.steerRatio = 15.74   # unknown end-to-end spec
       ret.tireStiffnessFactor = 0.6371   # hand-tune
@@ -63,14 +61,12 @@ class CarInterface(CarInterfaceBase):
           CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning, steering_angle_deadzone_deg=0.2)
 
     elif candidate == CAR.PRIUS_V:
-      stop_and_go = True
       ret.wheelbase = 2.78
       ret.steerRatio = 17.4
       ret.tireStiffnessFactor = 0.5533
       ret.mass = 3340. * CV.LB_TO_KG
 
     elif candidate in (CAR.RAV4, CAR.RAV4H):
-      stop_and_go = True if (candidate in CAR.RAV4H) else False
       ret.wheelbase = 2.65
       ret.steerRatio = 16.88   # 14.5 is spec end-to-end
       ret.tireStiffnessFactor = 0.5533
@@ -83,7 +79,6 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 2860. * CV.LB_TO_KG  # mean between normal and hybrid
 
     elif candidate in (CAR.LEXUS_RX, CAR.LEXUS_RX_TSS2):
-      stop_and_go = True
       ret.wheelbase = 2.79
       ret.steerRatio = 16.  # 14.8 is spec end-to-end
       ret.wheelSpeedFactor = 1.035
@@ -91,14 +86,12 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 4481. * CV.LB_TO_KG  # mean between min and max
 
     elif candidate in (CAR.CHR, CAR.CHR_TSS2):
-      stop_and_go = True
       ret.wheelbase = 2.63906
       ret.steerRatio = 13.6
       ret.tireStiffnessFactor = 0.7933
       ret.mass = 3300. * CV.LB_TO_KG
 
     elif candidate in (CAR.CAMRY, CAR.CAMRY_TSS2):
-      stop_and_go = True
       ret.wheelbase = 2.82448
       ret.steerRatio = 13.7
       ret.tireStiffnessFactor = 0.7933
@@ -106,7 +99,6 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate in (CAR.HIGHLANDER, CAR.HIGHLANDER_TSS2):
       # TODO: TSS-P models can do stop and go, but unclear if it requires sDSU or unplugging DSU
-      stop_and_go = True
       ret.wheelbase = 2.8194  # average of 109.8 and 112.2 in
       ret.steerRatio = 16.0
       ret.tireStiffnessFactor = 0.8
@@ -115,7 +107,6 @@ class CarInterface(CarInterfaceBase):
     elif candidate in (CAR.AVALON, CAR.AVALON_2019, CAR.AVALON_TSS2):
       # starting from 2019, all Avalon variants have stop and go
       # https://engage.toyota.com/static/images/toyota_safety_sense/TSS_Applicability_Chart.pdf
-      stop_and_go = candidate != CAR.AVALON
       ret.wheelbase = 2.82
       ret.steerRatio = 14.8  # Found at https://pressroom.toyota.com/releases/2016+avalon+product+specs.download
       ret.tireStiffnessFactor = 0.7983
@@ -155,7 +146,6 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 3677. * CV.LB_TO_KG  # mean between min and max
 
     elif candidate == CAR.SIENNA:
-      stop_and_go = True
       ret.wheelbase = 3.03
       ret.steerRatio = 15.5
       ret.tireStiffnessFactor = 0.444
@@ -174,18 +164,22 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 4034. * CV.LB_TO_KG
 
     elif candidate == CAR.LEXUS_CTH:
-      stop_and_go = True
       ret.wheelbase = 2.60
       ret.steerRatio = 18.6
       ret.tireStiffnessFactor = 0.517
       ret.mass = 3108 * CV.LB_TO_KG  # mean between min and max
 
     elif candidate in (CAR.LEXUS_NX, CAR.LEXUS_NX_TSS2):
-      stop_and_go = True
       ret.wheelbase = 2.66
       ret.steerRatio = 14.7
       ret.tireStiffnessFactor = 0.444  # not optimized yet
       ret.mass = 4070 * CV.LB_TO_KG
+
+    elif candidate == CAR.LEXUS_LC_TSS2:
+      ret.wheelbase = 2.87
+      ret.steerRatio = 13.0
+      ret.tireStiffnessFactor = 0.444  # not optimized yet
+      ret.mass = 4500 * CV.LB_TO_KG
 
     elif candidate == CAR.PRIUS_TSS2:
       ret.wheelbase = 2.70002  # from toyota online sepc.
@@ -194,7 +188,6 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 3115. * CV.LB_TO_KG
 
     elif candidate == CAR.MIRAI:
-      stop_and_go = True
       ret.wheelbase = 2.91
       ret.steerRatio = 14.8
       ret.tireStiffnessFactor = 0.8
@@ -225,10 +218,6 @@ class CarInterface(CarInterfaceBase):
     found_ecus = [fw.ecu for fw in car_fw]
     ret.enableDsu = len(found_ecus) > 0 and Ecu.dsu not in found_ecus and candidate not in (NO_DSU_CAR | UNSUPPORTED_DSU_CAR) \
                                         and not (ret.flags & ToyotaFlags.SMART_DSU)
-    ret.enableGasInterceptor = 0x201 in fingerprint[0]
-
-    if ret.enableGasInterceptor:
-      ret.safetyConfigs[0].safetyParam |= Panda.FLAG_TOYOTA_GAS_INTERCEPTOR
 
     # if the smartDSU is detected, openpilot can send ACC_CONTROL and the smartDSU will block it from the DSU or radar.
     # since we don't yet parse radar on TSS2/TSS-P radar-based ACC cars, gate longitudinal behind experimental toggle
@@ -253,13 +242,17 @@ class CarInterface(CarInterfaceBase):
     #  - TSS-P DSU-less cars w/ CAN filter installed (no radar parser yet)
     ret.openpilotLongitudinalControl = use_sdsu or ret.enableDsu or candidate in (TSS2_CAR - RADAR_ACC_CAR) or bool(ret.flags & ToyotaFlags.DISABLE_RADAR.value)
     ret.autoResumeSng = ret.openpilotLongitudinalControl and candidate in NO_STOP_TIMER_CAR
+    ret.enableGasInterceptor = 0x201 in fingerprint[0] and ret.openpilotLongitudinalControl
 
     if not ret.openpilotLongitudinalControl:
       ret.safetyConfigs[0].safetyParam |= Panda.FLAG_TOYOTA_STOCK_LONGITUDINAL
 
+    if ret.enableGasInterceptor:
+      ret.safetyConfigs[0].safetyParam |= Panda.FLAG_TOYOTA_GAS_INTERCEPTOR
+
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter.
-    ret.minEnableSpeed = -1. if (stop_and_go or ret.enableGasInterceptor) else MIN_ACC_SPEED
+    ret.minEnableSpeed = -1. if (candidate in STOP_AND_GO_CAR or ret.enableGasInterceptor) else MIN_ACC_SPEED
 
     tune = ret.longitudinalTuning
     tune.deadzoneBP = [0., 9.]
@@ -269,24 +262,24 @@ class CarInterface(CarInterfaceBase):
       ret.stopAccel = -2.5
       tune.deadzoneBP = [0., 16., 20., 30.]
       tune.deadzoneV = [0., .03, .06, .15]
-      ret.stoppingDecelRate = 0.3  # This is okay for TSS-P
+      ret.stoppingDecelRate = 0.17  # This is okay for TSS-P
       if candidate in TSS2_CAR:
         ret.vEgoStopping = 0.25
         ret.vEgoStarting = 0.25
         ret.stoppingDecelRate = 0.009  # reach stopping target smoothly
-      tune.kpBP = [0.]
-      tune.kpV = [1.]
-      tune.kiBP = [0.]
-      tune.kiV = [1.]
+      tune.kpBP = [0., 5.]
+      tune.kpV = [0.8, 1.]
+      tune.kiBP = [0., 5.]
+      tune.kiV = [0.3, 1.]
     elif params.get_bool("FrogsGoMooTune"):
       tune.deadzoneBP = [0., 16., 20., 30.]
       tune.deadzoneV = [0., .03, .06, .15]
       tune.kpBP = [0., 5., 20.]
       tune.kpV = [1.3, 1.0, 0.7]
 
-      # In MPH  = [ 0.,   2,    5,   11,   27,  45,  52,  67,   90] ​​
-      tune.kiBP = [ 0.,  1.,   2.,   5.,  12., 20., 23., 30.,  40.]
-      tune.kiV =  [.33, .33, .313, .245, .215, .17, .10, .01, .001]
+      # In MPH  = [  0,   27,   45,  60,  89]
+      tune.kiBP = [ 0.,  12.,  20., 27., 40.]
+      tune.kiV =  [.35, .215, .195, .10, .01]
 
       if candidate in TSS2_CAR:
         ret.stopAccel = -0.40
@@ -298,12 +291,14 @@ class CarInterface(CarInterfaceBase):
       ret.vEgoStarting = 0.1
       ret.vEgoStopping = 0.1
     elif (candidate in TSS2_CAR or ret.enableGasInterceptor) and params.get_bool("DragonPilotTune"):
-      # TSS2 tune - Credit goes to the DragonPilot team!
+      # Credit goes to the DragonPilot team!
+      tune.deadzoneBP = [0., 16., 20., 30.]
+      tune.deadzoneV =  [0., .03, .06, .15]
       tune.kpBP = [0., 5., 20.]
       tune.kpV = [1.3, 1.0, 0.7]
-      # In MPH  = [ 0.,   2,    5,   11,   27,  45,  52,  67,   90] ​​
-      tune.kiBP = [ 0.,  1.,   2.,   5.,  12., 20., 23., 30.,  40.]
-      tune.kiV =  [.33, .33, .313, .245, .215, .17, .10, .01, .001]
+      # In MPH  = [  0,   27,   45,  60,  89]
+      tune.kiBP = [ 0.,  12.,  20., 27., 40.]
+      tune.kiV =  [.35, .215, .195, .10, .01]
       if candidate in TSS2_CAR:
         ret.vEgoStopping = 0.1         # car is near 0.1 to 0.2 when car starts requesting stopping accel
         ret.vEgoStarting = 0.1         # needs to be > or == vEgoStopping
@@ -334,8 +329,8 @@ class CarInterface(CarInterfaceBase):
       disable_ecu(logcan, sendcan, bus=0, addr=0x750, sub_addr=0xf, com_cont_req=communication_control)
 
   # returns a car.CarState
-  def _update(self, c, conditional_experimental_mode, frogpilot_variables):
-    ret = self.CS.update(self.cp, self.cp_cam, conditional_experimental_mode, frogpilot_variables)
+  def _update(self, c, frogpilot_variables):
+    ret = self.CS.update(self.cp, self.cp_cam, frogpilot_variables)
 
     # events
     events = self.create_common_events(ret, frogpilot_variables)

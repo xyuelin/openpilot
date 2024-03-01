@@ -1,11 +1,9 @@
 import os
 
-from cereal import car, log
+from cereal import car
 from openpilot.common.params import Params
-from openpilot.system.hardware import HARDWARE, PC, TICI
+from openpilot.system.hardware import PC, TICI
 from openpilot.selfdrive.manager.process import PythonProcess, NativeProcess, DaemonProcess
-
-WIFI = log.DeviceState.NetworkType.wifi
 
 WEBCAM = os.getenv("USE_WEBCAM") is not None
 
@@ -40,16 +38,18 @@ def always_run(started, params, params_memory, CP: car.CarParams) -> bool:
 def only_onroad(started: bool, params, params_memory, CP: car.CarParams) -> bool:
   return started
 
-def only_offroad(started, params, params_memor, CP: car.CarParams) -> bool:
+def only_offroad(started, params, params_memory, CP: car.CarParams) -> bool:
   return not started
 
 # FrogPilot functions
 def allow_uploads(started, params, params_memory, CP: car.CarParams) -> bool:
-  wifi_connected = HARDWARE.get_network_type() == WIFI and not started
-  return wifi_connected if params_memory.get_bool("DisableOnroadUploads") else enable_logging(started, params, params_memory, CP)
+  return not started if params_memory.get_bool("DisableOnroadUploads") else enable_uploading(started, params, params_memory, CP)
 
 def enable_logging(started, params, params_memory, CP: car.CarParams) -> bool:
   return not (params_memory.get_bool("FireTheBabysitter") and params_memory.get_bool("NoLogging"))
+
+def enable_uploading(started, params, params_memory, CP: car.CarParams) -> bool:
+  return not (params_memory.get_bool("FireTheBabysitter") and params_memory.get_bool("NoUploads"))
 
 def osm(started, params, params_memory, CP: car.CarParams) -> bool:
   return params_memory.get_bool("RoadNameUI") or params_memory.get_bool("SpeedLimitController")
@@ -59,13 +59,13 @@ procs = [
 
   NativeProcess("camerad", "system/camerad", ["./camerad"], driverview),
   NativeProcess("logcatd", "system/logcatd", ["./logcatd"], (enable_logging and only_onroad)),
-  NativeProcess("proclogd", "system/proclogd", ["./proclogd"], only_onroad),
+  NativeProcess("proclogd", "system/proclogd", ["./proclogd"], enable_logging),
   PythonProcess("logmessaged", "system.logmessaged", enable_logging),
   PythonProcess("micd", "system.micd", iscar),
   PythonProcess("timed", "system.timed", always_run, enabled=not PC),
 
   PythonProcess("dmonitoringmodeld", "selfdrive.modeld.dmonitoringmodeld", driverview, enabled=(not PC or WEBCAM)),
-  NativeProcess("encoderd", "system/loggerd", ["./encoderd"], only_onroad),
+  NativeProcess("encoderd", "system/loggerd", ["./encoderd"], enable_logging),
   NativeProcess("stream_encoderd", "system/loggerd", ["./encoderd", "--stream"], notcar),
   NativeProcess("loggerd", "system/loggerd", ["./loggerd"], (enable_logging and logging)),
   NativeProcess("modeld", "selfdrive/modeld", ["./modeld"], only_onroad),
@@ -91,9 +91,9 @@ procs = [
   PythonProcess("radard", "selfdrive.controls.radard", only_onroad),
   PythonProcess("thermald", "selfdrive.thermald.thermald", always_run),
   PythonProcess("tombstoned", "selfdrive.tombstoned", enable_logging, enabled=not PC),
-  PythonProcess("updated", "selfdrive.updated", only_offroad, enabled=not PC),
+  PythonProcess("updated", "selfdrive.updated", always_run, enabled=not PC),
   PythonProcess("uploader", "system.loggerd.uploader", allow_uploads),
-  PythonProcess("statsd", "selfdrive.statsd", always_run),
+  PythonProcess("statsd", "selfdrive.statsd", enable_logging),
 
   # debug procs
   NativeProcess("bridge", "cereal/messaging", ["./bridge"], notcar),

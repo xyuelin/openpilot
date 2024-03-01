@@ -14,18 +14,22 @@ public:
 
 signals:
   void closeParentToggle();
+  void closeSubParentToggle();
   void openParentToggle();
+  void openSubParentToggle();
 
 private:
   void hideEvent(QHideEvent *event);
+  void hideSubSubToggles();
   void hideSubToggles();
   void parentToggleClicked();
+  void subParentToggleClicked();
   void updateCarToggles();
   void updateMetric();
   void updateState(const UIState &s);
   void updateToggles();
 
-  ButtonControl *slscPriorityButton;
+  ButtonControl *slcPriorityButton;
 
   FrogPilotButtonIconControl *modelSelectorButton;
 
@@ -35,14 +39,19 @@ private:
   FrogPilotDualParamControl *standardProfile;
   FrogPilotDualParamControl *relaxedProfile;
 
-  std::set<QString> conditionalExperimentalKeys = {"CECurves", "CECurvesLead", "CESlowerLead", "CENavigation", "CEStopLights", "CESignal"};
-  std::set<QString> fireTheBabysitterKeys = {"NoLogging", "MuteOverheated", "OfflineMode"};
+  std::set<QString> aolKeys = {"AlwaysOnLateralMain", "HideAOLStatusBar"};
+  std::set<QString> conditionalExperimentalKeys = {"CECurves", "CECurvesLead", "CESlowerLead", "CENavigation", "CEStopLights", "CESignal", "HideCEMStatusBar"};
+  std::set<QString> experimentalModeActivationKeys = {"ExperimentalModeViaDistance", "ExperimentalModeViaLKAS", "ExperimentalModeViaScreen"};
+  std::set<QString> fireTheBabysitterKeys = {"NoLogging", "MuteOverheated", "NoUploads", "OfflineMode"};
   std::set<QString> laneChangeKeys = {"LaneChangeTime", "LaneDetection", "LaneDetectionWidth", "OneLaneChange"};
   std::set<QString> lateralTuneKeys = {"ForceAutoTune", "NNFF", "SteerRatio", "UseLateralJerk"};
-  std::set<QString> longitudinalTuneKeys = {"AccelerationProfile", "AggressiveAcceleration", "SmoothBraking", "StoppingDistance"};
+  std::set<QString> longitudinalTuneKeys = {"AccelerationProfile", "DecelerationProfile", "AggressiveAcceleration", "SmoothBraking", "StoppingDistance"};
   std::set<QString> mtscKeys = {"DisableMTSCSmoothing", "MTSCAggressiveness", "MTSCCurvatureCheck", "MTSCLimit"};
-  std::set<QString> qolKeys = {"DisableOnroadUploads", "HigherBitrate", "NavChill", "PauseLateralOnSignal", "ReverseCruise", "SetSpeedLimit", "SetSpeedOffset"};
-  std::set<QString> speedLimitControllerKeys = {"Offset1", "Offset2", "Offset3", "Offset4", "SLCFallback", "SLCOverride", "SLCPriority"};
+  std::set<QString> qolKeys = {"DisableOnroadUploads", "HigherBitrate", "NavChill", "PauseLateralOnSignal", "ReverseCruise", "SetSpeedOffset"};
+  std::set<QString> speedLimitControllerKeys = {"SLCControls", "SLCQOL", "SLCVisuals"};
+  std::set<QString> speedLimitControllerControlsKeys = {"Offset1", "Offset2", "Offset3", "Offset4", "SLCFallback", "SLCOverride", "SLCPriority"};
+  std::set<QString> speedLimitControllerQOLKeys = {"SLCConfirmation", "ForceMPHDashboard", "SetSpeedLimit"};
+  std::set<QString> speedLimitControllerVisualsKeys = {"ShowSLCOffset", "UseVienna"};
   std::set<QString> visionTurnControlKeys = {"DisableVTSCSmoothing", "CurveSensitivity", "TurnAggressiveness"};
 
   std::map<std::string, ParamControl*> toggles;

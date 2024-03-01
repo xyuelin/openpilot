@@ -70,16 +70,16 @@ class RouteEngine:
     # FrogPilot variables
     self.stop_coord = []
     self.stop_signal = []
-    self.nav_condition = False
-    self.noo_condition = False
+
+    self.approaching_intersection = False
+    self.approaching_turn = False
 
     self.update_frogpilot_params()
 
   def update(self):
     # Update FrogPilot parameters
     if self.params_memory.get_bool("FrogPilotTogglesUpdated"):
-      updateFrogPilotParams = threading.Thread(target=self.update_frogpilot_params)
-      updateFrogPilotParams.start()
+      self.update_frogpilot_params()
 
     self.sm.update(0)
 
@@ -265,7 +265,6 @@ class RouteEngine:
 
     if self.step_idx is None:
       msg.valid = False
-      SpeedLimitController.load_state()
       SpeedLimitController.nav_speed_limit = 0
       SpeedLimitController.write_nav_state()
 
@@ -345,11 +344,9 @@ class RouteEngine:
 
     if ('maxspeed' in closest.annotations) and self.localizer_valid:
       msg.navInstruction.speedLimit = closest.annotations['maxspeed']
-      SpeedLimitController.load_state()
       SpeedLimitController.nav_speed_limit = closest.annotations['maxspeed']
       SpeedLimitController.write_nav_state()
     if not self.localizer_valid or ('maxspeed' not in closest.annotations):
-      SpeedLimitController.load_state()
       SpeedLimitController.nav_speed_limit = 0
       SpeedLimitController.write_nav_state()
 
@@ -397,26 +394,21 @@ class RouteEngine:
 
         # Calculate the distance to the stopSign or trafficLight
         distance_to_condition = self.last_position.distance_to(self.stop_coord[index])
-        if self.conditional_navigation_intersections and distance_to_condition < max((seconds_to_stop * v_ego), 25):
-          self.nav_condition = True
-        else:
-          self.nav_condition = False  # Not approaching any stopSign or trafficLight
+        self.approaching_intersection = self.conditional_navigation_intersections and distance_to_condition < max((seconds_to_stop * v_ego), 25)
       else:
-        self.nav_condition = False  # No more stopSign or trafficLight in array
+        self.approaching_intersection = False  # No more stopSign or trafficLight in array
 
       # Determine if NoO distance to maneuver is upcoming
-      if self.conditional_navigation_turns and distance_to_maneuver_along_geometry < max((seconds_to_stop * v_ego), 25):
-        self.noo_condition = True
-      else:
-        self.noo_condition = False  # Not approaching any NoO maneuver
+      self.approaching_turn = self.conditional_navigation_turns and distance_to_maneuver_along_geometry < max((seconds_to_stop * v_ego), 25)
     else:
-      self.nav_condition = False
-      self.noo_condition = False
+      self.approaching_intersection = False
+      self.approaching_turn = False
 
     frogpilot_plan_send = messaging.new_message('frogpilotNavigation')
     frogpilotNavigation = frogpilot_plan_send.frogpilotNavigation
 
-    frogpilotNavigation.navigationConditionMet = self.nav_condition or self.noo_condition
+    frogpilotNavigation.approachingIntersection = self.approaching_intersection
+    frogpilotNavigation.approachingTurn = self.approaching_turn
 
     self.pm.send('frogpilotNavigation', frogpilot_plan_send)
 
@@ -470,8 +462,8 @@ class RouteEngine:
 
   def update_frogpilot_params(self):
     self.conditional_navigation = self.params.get_bool("CENavigation")
-    self.conditional_navigation_intersections = self.params.get_bool("CENavigationIntersections") and self.conditional_navigation
-    self.conditional_navigation_turns = self.params.get_bool("CENavigationTurns") and self.conditional_navigation
+    self.conditional_navigation_intersections = self.conditional_navigation and self.params.get_bool("CENavigationIntersections")
+    self.conditional_navigation_turns = self.conditional_navigation and self.params.get_bool("CENavigationTurns")
 
 def main():
   pm = messaging.PubMaster(['navInstruction', 'navRoute', 'frogpilotNavigation'])

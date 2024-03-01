@@ -6,30 +6,37 @@ import threading
 from types import SimpleNamespace
 from typing import SupportsFloat
 
-from cereal import car, log, custom
-from openpilot.common.numpy_fast import clip
-from openpilot.common.realtime import config_realtime_process, Priority, Ratekeeper, DT_CTRL
-from openpilot.common.params import Params
 import cereal.messaging as messaging
+import openpilot.selfdrive.sentry as sentry
+
+from cereal import car, log, custom
 from cereal.visionipc import VisionIpcClient, VisionStreamType
-from openpilot.common.conversions import Conversions as CV
+
 from panda import ALTERNATIVE_EXPERIENCE
+
+from openpilot.common.conversions import Conversions as CV
+from openpilot.common.numpy_fast import clip
+from openpilot.common.params import Params
+from openpilot.common.realtime import config_realtime_process, Priority, Ratekeeper, DT_CTRL
 from openpilot.common.swaglog import cloudlog
-from openpilot.system.version import get_short_branch
+
 from openpilot.selfdrive.boardd.boardd import can_list_to_can_capnp
 from openpilot.selfdrive.car.car_helpers import get_car, get_startup_event, get_one_can
+from openpilot.selfdrive.car.interfaces import CarInterfaceBase
+from openpilot.selfdrive.controls.lib.alertmanager import AlertManager, set_offroad_alert
 from openpilot.selfdrive.controls.lib.drive_helpers import VCruiseHelper, clip_curvature
+from openpilot.selfdrive.controls.lib.events import Events, ET
 from openpilot.selfdrive.controls.lib.latcontrol import LatControl, MIN_LATERAL_CONTROL_SPEED
-from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from openpilot.selfdrive.controls.lib.latcontrol_angle import LatControlAngle, STEER_ANGLE_SATURATION_THRESHOLD
 from openpilot.selfdrive.controls.lib.latcontrol_torque import LatControlTorque
-from openpilot.selfdrive.controls.lib.events import Events, ET
-from openpilot.selfdrive.controls.lib.alertmanager import AlertManager, set_offroad_alert
+from openpilot.selfdrive.controls.lib.longcontrol import LongControl
 from openpilot.selfdrive.controls.lib.vehicle_model import VehicleModel
-from openpilot.system.hardware import HARDWARE
 
-import openpilot.selfdrive.sentry as sentry
+from openpilot.system.hardware import HARDWARE
+from openpilot.system.version import get_short_branch
+
+from openpilot.selfdrive.frogpilot.functions.frogpilot_functions import CRUISING_SPEED, THRESHOLD, MovingAverageCalculator
 
 from openpilot.selfdrive.frogpilot.functions.speed_limit_controller import SpeedLimitController
 
@@ -54,8 +61,6 @@ ButtonType = car.CarState.ButtonEvent.Type
 SafetyModel = car.CarParams.SafetyModel
 GearShifter = car.CarState.GearShifter
 
-FrogPilotEventName = custom.FrogPilotEvents
-
 IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput)
 CSID_MAP = {"1": EventName.roadCameraError, "2": EventName.wideRoadCameraError, "0": EventName.driverCameraError}
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
@@ -63,48 +68,19 @@ ACTIVE_STATES = (State.enabled, State.softDisabling, State.overriding)
 ENABLED_STATES = (State.preEnabled, *ACTIVE_STATES)
 
 
-class Controls:
+class CarD:
+  CI: CarInterfaceBase
+  CS: car.CarState
+
   def __init__(self, CI=None):
-    config_realtime_process(4, Priority.CTRL_HIGH)
-
-    # Ensure the current branch is cached, otherwise the first iteration of controlsd lags
-    self.branch = get_short_branch()
-
-    # Setup sockets
-    self.pm = messaging.PubMaster(['sendcan', 'controlsState', 'carState',
-                                   'carControl', 'onroadEvents', 'carParams',
-                                   'frogpilotCarControl'])
-
-    self.sensor_packets = ["accelerometer", "gyroscope"]
-    self.camera_packets = ["roadCameraState", "driverCameraState", "wideRoadCameraState"]
-
-    self.log_sock = messaging.sub_sock('androidLog')
     self.can_sock = messaging.sub_sock('can', timeout=20)
+    self.sm = messaging.SubMaster(['pandaStates'])
+    self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams'])
 
-    # FrogPilot variables
+    self.can_rcv_timeout_counter = 0      # conseuctive timeout count
+    self.can_rcv_cum_timeout_counter = 0  # cumulative timeout count
+
     self.params = Params()
-    self.params_memory = Params("/dev/shm/params")
-
-    self.frogpilot_variables = SimpleNamespace()
-
-    self.driving_gear = False
-    self.openpilot_crashed = False
-    self.random_event_triggered = False
-    self.stopped_for_light_previously = False
-    self.vCruise69_alert_played = False
-
-    self.previous_lead_distance = 0
-    self.previous_speed_limit = 0
-    self.random_event_timer = 0
-
-    ignore = self.sensor_packets + ['testJoystick']
-    if SIMULATION:
-      ignore += ['driverCameraState', 'managerState']
-    self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
-                                   'driverMonitoringState', 'longitudinalPlan', 'liveLocationKalman',
-                                   'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
-                                   'testJoystick', 'frogpilotPlan'] + self.camera_packets + self.sensor_packets,
-                                  ignore_alive=ignore, ignore_avg_freq=['radarState', 'testJoystick'], ignore_valid=['testJoystick', ])
 
     if CI is None:
       # wait for one pandaState and one CAN packet
@@ -116,6 +92,122 @@ class Controls:
       self.CI, self.CP = get_car(self.can_sock, self.pm.sock['sendcan'], experimental_long_allowed, num_pandas)
     else:
       self.CI, self.CP = CI, CI.CP
+
+  def initialize(self):
+    """Initialize CarInterface, once controls are ready"""
+    self.CI.init(self.CP, self.can_sock, self.pm.sock['sendcan'])
+
+  def state_update(self, CC: car.CarControl, frogpilot_variables):
+    """carState update loop, driven by can"""
+
+    # TODO: This should not depend on carControl
+
+    # Update carState from CAN
+    can_strs = messaging.drain_sock_raw(self.can_sock, wait_for_one=True)
+    self.CS = self.CI.update(CC, can_strs, frogpilot_variables)
+
+    self.sm.update(0)
+
+    can_rcv_valid = len(can_strs) > 0
+
+    # Check for CAN timeout
+    if not can_rcv_valid:
+      self.can_rcv_timeout_counter += 1
+      self.can_rcv_cum_timeout_counter += 1
+    else:
+      self.can_rcv_timeout_counter = 0
+
+    self.can_rcv_timeout = self.can_rcv_timeout_counter >= 5
+
+    if can_rcv_valid and REPLAY:
+      self.can_log_mono_time = messaging.log_from_bytes(can_strs[0]).logMonoTime
+
+    return self.CS
+
+  def state_publish(self, car_events):
+    """carState and carParams publish loop"""
+
+    # TODO: carState should be independent of the event loop
+
+    # carState
+    cs_send = messaging.new_message('carState')
+    cs_send.valid = self.CS.canValid
+    cs_send.carState = self.CS
+    cs_send.carState.events = car_events
+    self.pm.send('carState', cs_send)
+
+    # carParams - logged every 50 seconds (> 1 per segment)
+    if (self.sm.frame % int(50. / DT_CTRL) == 0):
+      cp_send = messaging.new_message('carParams')
+      cp_send.valid = True
+      cp_send.carParams = self.CP
+      self.pm.send('carParams', cp_send)
+
+  def controls_update(self, CC: car.CarControl, frogpilot_variables):
+    """control update loop, driven by carControl"""
+
+    # send car controls over can
+    now_nanos = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)
+    actuators_output, can_sends = self.CI.apply(CC, now_nanos, frogpilot_variables)
+    self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=self.CS.canValid))
+
+    return actuators_output
+
+
+class Controls:
+  def __init__(self, CI=None):
+    self.card = CarD(CI)
+
+    self.CP = self.card.CP
+    self.CI = self.card.CI
+
+    config_realtime_process(4, Priority.CTRL_HIGH)
+
+    # Ensure the current branch is cached, otherwise the first iteration of controlsd lags
+    self.branch = get_short_branch()
+
+    # Setup sockets
+    self.pm = messaging.PubMaster(['controlsState', 'carControl', 'onroadEvents', 'frogpilotCarControl'])
+
+    self.sensor_packets = ["accelerometer", "gyroscope"]
+    self.camera_packets = ["roadCameraState", "driverCameraState", "wideRoadCameraState"]
+
+    self.log_sock = messaging.sub_sock('androidLog')
+
+    # FrogPilot variables
+    self.params = Params()
+    self.params_memory = Params("/dev/shm/params")
+
+    self.frogpilot_variables = SimpleNamespace()
+
+    self.driving_gear = False
+    self.fcw_random_event_triggered = False
+    self.frogpilot_variables.disable_reverse_cruise_increase = False
+    self.openpilot_crashed = False
+    self.previously_enabled = False
+    self.random_event_triggered = False
+    self.stopped_for_light_previously = False
+    self.vCruise69_alert_played = False
+
+    self.drive_distance = 0
+    self.previous_drive_distance = 0
+    self.previous_lead_distance = 0
+    self.previous_speed_limit = SpeedLimitController.desired_speed_limit
+    self.previous_v_cruise_cluster_kph = 0
+    self.random_event_timer = 0
+    self.speed_limit_changed_timer = 0
+
+    self.green_light_mac = MovingAverageCalculator()
+
+    ignore = self.sensor_packets + ['testJoystick']
+    if SIMULATION:
+      ignore += ['driverCameraState', 'managerState']
+    self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
+                                   'driverMonitoringState', 'longitudinalPlan', 'liveLocationKalman',
+                                   'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters',
+                                   'testJoystick', 'frogpilotPlan'] + self.camera_packets + self.sensor_packets,
+                                  ignore_alive=ignore, ignore_avg_freq=ignore+['radarState', 'testJoystick'], ignore_valid=['testJoystick', ],
+                                  frequency=int(1/DT_CTRL))
 
     self.joystick_mode = self.params.get_bool("JoystickDebugMode")
 
@@ -196,8 +288,6 @@ class Controls:
     self.soft_disable_timer = 0
     self.mismatch_counter = 0
     self.cruise_mismatch_counter = 0
-    self.can_rcv_timeout_counter = 0      # conseuctive timeout count
-    self.can_rcv_cum_timeout_counter = 0  # cumulative timeout count
     self.last_blinker_frame = 0
     self.last_steering_pressed_frame = 0
     self.distance_traveled = 0
@@ -246,6 +336,8 @@ class Controls:
     """Compute onroadEvents from carState"""
 
     self.events.clear()
+
+    frogpilot_plan = self.sm['frogpilotPlan']
 
     # Show crash log event if openpilot crashed
     if os.path.isfile(os.path.join(sentry.CRASHES_DIR, 'error.txt')):
@@ -342,7 +434,7 @@ class Controls:
     # Handle lane change
     if self.sm['modelV2'].meta.laneChangeState == LaneChangeState.preLaneChange:
       direction = self.sm['modelV2'].meta.laneChangeDirection
-      desired_lane = self.sm['frogpilotPlan'].laneWidthLeft if direction == LaneChangeDirection.left else self.sm['frogpilotPlan'].laneWidthRight
+      desired_lane = frogpilot_plan.laneWidthLeft if direction == LaneChangeDirection.left else frogpilot_plan.laneWidthRight
       lane_available = desired_lane >= self.lane_detection_width
 
       if (CS.leftBlindspot and direction == LaneChangeDirection.left) or \
@@ -378,7 +470,8 @@ class Controls:
       else:
         safety_mismatch = pandaState.safetyModel not in IGNORED_SAFETY_MODES
 
-      if safety_mismatch or pandaState.safetyRxChecksInvalid or self.mismatch_counter >= 200:
+      # safety mismatch allows some time for boardd to set the safety mode and publish it back from panda
+      if (safety_mismatch and self.sm.frame*DT_CTRL > 10.) or pandaState.safetyRxChecksInvalid or self.mismatch_counter >= 200:
         self.events.add(EventName.controlsMismatch)
 
       if log.PandaState.FaultType.relayMalfunction in pandaState.faults:
@@ -390,7 +483,7 @@ class Controls:
     num_events = len(self.events)
 
     not_running = {p.name for p in self.sm['managerState'].processes if not p.running and p.shouldBeRunning}
-    if self.sm.rcv_frame['managerState'] and (not_running - IGNORE_PROCESSES):
+    if self.sm.recv_frame['managerState'] and (not_running - IGNORE_PROCESSES):
       self.events.add(EventName.processNotRunning)
       if not_running != self.not_running_prev:
         cloudlog.event("process_not_running", not_running=not_running, error=True)
@@ -413,10 +506,9 @@ class Controls:
       self.events.add(EventName.canError)
 
     # generic catch-all. ideally, a more specific event should be added above instead
-    can_rcv_timeout = self.can_rcv_timeout_counter >= 5
     has_disable_events = self.events.contains(ET.NO_ENTRY) and (self.events.contains(ET.SOFT_DISABLE) or self.events.contains(ET.IMMEDIATE_DISABLE))
     no_system_errors = (not has_disable_events) or (len(self.events) == num_events)
-    if (not self.sm.all_checks() or can_rcv_timeout) and no_system_errors:
+    if (not self.sm.all_checks() or self.card.can_rcv_timeout) and no_system_errors:
       if not self.sm.all_alive():
         self.events.add(EventName.commIssue)
       elif not self.sm.all_freq_ok():
@@ -428,7 +520,7 @@ class Controls:
         'invalid': [s for s, valid in self.sm.valid.items() if not valid],
         'not_alive': [s for s, alive in self.sm.alive.items() if not alive],
         'not_freq_ok': [s for s, freq_ok in self.sm.freq_ok.items() if not freq_ok],
-        'can_rcv_timeout': can_rcv_timeout,
+        'can_rcv_timeout': self.card.can_rcv_timeout,
       }
       if logs != self.logged_comm_issue:
         cloudlog.event("commIssue", error=True, **logs)
@@ -447,7 +539,7 @@ class Controls:
         self.events.add(EventName.paramsdTemporaryError)
 
     # conservative HW alert. if the data or frequency are off, locationd will throw an error
-    if any((self.sm.frame - self.sm.rcv_frame[s])*DT_CTRL > 10. for s in self.sensor_packets):
+    if any((self.sm.frame - self.sm.recv_frame[s])*DT_CTRL > 10. for s in self.sensor_packets):
       self.events.add(EventName.sensorDataInvalid)
 
     if not REPLAY:
@@ -463,6 +555,11 @@ class Controls:
     planner_fcw = self.sm['longitudinalPlan'].fcw and self.enabled
     if planner_fcw or model_fcw:
       self.events.add(EventName.fcw)
+      self.fcw_random_event_triggered = True
+    elif self.fcw_random_event_triggered:
+      self.events.add(EventName.yourFrogTriedToKillMe)
+      self.fcw_random_event_triggered = False
+      self.random_event_triggered = True
 
     for m in messaging.drain_sock(self.log_sock, wait_for_one=False):
       try:
@@ -477,40 +574,94 @@ class Controls:
 
     # TODO: fix simulator
     if not SIMULATION or REPLAY:
+      # Not show in first 1 km to allow for driving out of garage. This event shows after 5 minutes
       if not self.sm['liveLocationKalman'].gpsOK and self.sm['liveLocationKalman'].inputsOK and (self.distance_traveled > 1000):
-        # Not show in first 1 km to allow for driving out of garage. This event shows after 5 minutes
         self.events.add(EventName.noGps)
+      if self.sm['liveLocationKalman'].gpsOK:
+        self.distance_traveled = 0
+      self.distance_traveled += CS.vEgo * DT_CTRL
 
       if self.sm['modelV2'].frameDropPerc > 20:
         self.events.add(EventName.modeldLagging)
 
+    # Store the total distance traveled
+    self.drive_distance += CS.vEgo * DT_CTRL
+
+    if self.drive_distance != self.previous_drive_distance:
+      self.params_memory.put_float("FrogPilotKilometers", self.drive_distance / 1000)
+      self.params_memory.put_float("FrogPilotMinutes", self.sm.frame * DT_CTRL / 60)
+
     # Green light alert
     if self.green_light_alert:
-      stopped_for_light = self.sm['frogpilotPlan'].redLight and CS.standstill
+      stopped_for_light = frogpilot_plan.redLight and CS.standstill
       green_light = not stopped_for_light and self.stopped_for_light_previously
       self.stopped_for_light_previously = stopped_for_light
 
-      if green_light and not CS.gasPressed and not self.sm['longitudinalPlan'].hasLead:
+      self.previously_enabled |= (self.enabled or self.FPCC.alwaysOnLateral) and CS.vEgo > CRUISING_SPEED
+      self.previously_enabled &= self.driving_gear
+
+      green_light &= self.previously_enabled
+      green_light &= not CS.gasPressed
+      green_light &= not self.sm['longitudinalPlan'].hasLead
+
+      self.green_light_mac.add_data(green_light)
+      if self.green_light_mac.get_moving_average() >= THRESHOLD:
         self.events.add(EventName.greenLight)
 
     # Lead departing alert
-    if self.lead_departing_alert and self.driving_gear and self.sm.frame % 50 == 0:
+    if self.lead_departing_alert and self.sm.frame % 50 == 0:
       lead = self.sm['radarState'].leadOne
       lead_distance = lead.dRel
-      lead_departing = lead_distance - self.previous_lead_distance > 0.5 and self.previous_lead_distance != 0
+      lead_departing = lead_distance - self.previous_lead_distance > 0.5 and self.previous_lead_distance != 0 and CS.standstill
       self.previous_lead_distance = lead_distance
 
-      if lead_departing and lead.vLead > 1 and not CS.gasPressed and CS.standstill:
+      lead_departing &= not CS.gasPressed
+      lead_departing &= lead.vLead > 1
+      lead_departing &= self.driving_gear
+
+      if lead_departing:
         self.events.add(EventName.leadDeparting)
 
     # Speed limit changed alert
-    if self.speed_limit_alert:
-      speed_limit = SpeedLimitController.desired_speed_limit
-      speed_limit_changed = abs(speed_limit - self.previous_speed_limit) > 1 and self.previous_speed_limit != 0
-      self.previous_speed_limit = speed_limit
+    if self.speed_limit_alert or self.speed_limit_confirmation:
+      current_speed_limit = frogpilot_plan.slcSpeedLimit
+      desired_speed_limit = SpeedLimitController.desired_speed_limit
 
-      if speed_limit_changed:
+      speed_limit_changed = desired_speed_limit != self.previous_speed_limit and abs(current_speed_limit - desired_speed_limit) > 1
+
+      speed_limit_changed_lower = speed_limit_changed and self.previous_speed_limit > desired_speed_limit
+      speed_limit_changed_higher = speed_limit_changed and self.previous_speed_limit < desired_speed_limit
+
+      self.previous_speed_limit = desired_speed_limit
+
+      if speed_limit_changed_lower:
+        if self.speed_limit_confirmation_lower:
+          self.FPCC.speedLimitChanged = True
+        else:
+          self.params_memory.put_bool("SLCConfirmed", True)
+      if speed_limit_changed_higher:
+        if self.speed_limit_confirmation_higher:
+          self.FPCC.speedLimitChanged = True
+        else:
+          self.params_memory.put_bool("SLCConfirmed", True)
+
+      if self.params_memory.get_bool("SLCConfirmedPressed") or current_speed_limit == desired_speed_limit or not self.speed_limit_confirmation:
+        self.FPCC.speedLimitChanged = False
+        self.params_memory.put_bool("SLCConfirmedPressed", False)
+
+      if speed_limit_changed and self.speed_limit_alert:
         self.events.add(EventName.speedLimitChanged)
+
+      # Cancel the confirmation message after 10 seconds
+      if self.FPCC.speedLimitChanged:
+        self.speed_limit_timer += 1
+        if self.speed_limit_timer >= 1000:
+          self.FPCC.speedLimitChanged = False
+          self.speed_limit_timer = 0
+      else:
+        self.speed_limit_timer = 0
+    else:
+      self.FPCC.speedLimitChanged = False
 
     # vCruise set to 69 Random Event alert
     if self.random_events:
@@ -528,17 +679,13 @@ class Controls:
   def data_sample(self):
     """Receive data from sockets and update carState"""
 
-    # Update carState from CAN
-    can_strs = messaging.drain_sock_raw(self.can_sock, wait_for_one=True)
-    CS = self.CI.update(self.CC, can_strs, self.conditional_experimental_mode, self.frogpilot_variables)
-    if len(can_strs) and REPLAY:
-      self.can_log_mono_time = messaging.log_from_bytes(can_strs[0]).logMonoTime
+    CS = self.card.state_update(self.CC, self.frogpilot_variables)
 
     self.sm.update(0)
 
     if not self.initialized:
       all_valid = CS.canValid and self.sm.all_checks()
-      timed_out = self.sm.frame * DT_CTRL > (6. if REPLAY else 3.5)
+      timed_out = self.sm.frame * DT_CTRL > 6.
       if all_valid or timed_out or (SIMULATION and not REPLAY):
         available_streams = VisionIpcClient.available_streams("camerad", block=False)
         if VisionStreamType.VISION_STREAM_ROAD not in available_streams:
@@ -547,18 +694,22 @@ class Controls:
           self.sm.ignore_alive.append('wideRoadCameraState')
 
         if not self.CP.passive:
-          self.CI.init(self.CP, self.can_sock, self.pm.sock['sendcan'])
+          self.card.initialize()
 
         self.initialized = True
         self.set_initial_state()
         self.params.put_bool_nonblocking("ControlsReady", True)
 
-    # Check for CAN timeout
-    if not can_strs:
-      self.can_rcv_timeout_counter += 1
-      self.can_rcv_cum_timeout_counter += 1
-    else:
-      self.can_rcv_timeout_counter = 0
+        cloudlog.event(
+          "controlsd.initialized",
+          dt=self.sm.frame*DT_CTRL,
+          timeout=timed_out,
+          canValid=CS.canValid,
+          invalid=[s for s, valid in self.sm.valid.items() if not valid],
+          not_alive=[s for s, alive in self.sm.alive.items() if not alive],
+          not_freq_ok=[s for s, freq_ok in self.sm.freq_ok.items() if not freq_ok],
+          error=True,
+        )
 
     # When the panda and controlsd do not agree on controls_allowed
     # we want to disengage openpilot. However the status from the panda goes through
@@ -572,14 +723,12 @@ class Controls:
            if ps.safetyModel not in IGNORED_SAFETY_MODES):
       self.mismatch_counter += 1
 
-    self.distance_traveled += CS.vEgo * DT_CTRL
-
     return CS
 
   def state_transition(self, CS):
     """Compute conditional state transitions and execute actions on state transitions"""
 
-    self.v_cruise_helper.update_v_cruise(CS, self.enabled, self.is_metric, self.frogpilot_variables)
+    self.v_cruise_helper.update_v_cruise(CS, self.enabled, self.is_metric, self.FPCC.speedLimitChanged, self.frogpilot_variables)
 
     # decrement the soft disable timer at every step, as it's reset on
     # entrance in SOFT_DISABLING state
@@ -654,7 +803,7 @@ class Controls:
           else:
             self.state = State.enabled
           self.current_alert_types.append(ET.ENABLE)
-          self.v_cruise_helper.initialize_v_cruise(CS, self.experimental_mode, self.conditional_experimental_mode, self.frogpilot_variables)
+          self.v_cruise_helper.initialize_v_cruise(CS, self.experimental_mode, self.sm['frogpilotPlan'].unconfirmedSlcSpeedLimit, self.frogpilot_variables)
 
     # Check if openpilot is engaged and actuators are enabled
     self.enabled = self.state in ENABLED_STATES
@@ -681,7 +830,20 @@ class Controls:
     long_plan = self.sm['longitudinalPlan']
     model_v2 = self.sm['modelV2']
 
+    CC = car.CarControl.new_message()
+    CC.enabled = self.enabled
+
+    # FrogPilot functions
     frogpilot_plan = self.sm['frogpilotPlan']
+
+    # Disable reverse cruise increase on long press for PCM vehicles
+    if self.frogpilot_variables.reverse_cruise_increase and self.CP.pcmCruise and self.sm.frame % 50 == 0:
+      if self.v_cruise_helper.v_cruise_cluster_kph != self.previous_v_cruise_cluster_kph:
+        self.frogpilot_variables.disable_reverse_cruise_increase = True
+      else:
+        self.frogpilot_variables.disable_reverse_cruise_increase = False
+
+      self.previous_v_cruise_cluster_kph = self.v_cruise_helper.v_cruise_cluster_kph
 
     # Reset the Random Event flag
     if self.random_event_triggered:
@@ -691,11 +853,8 @@ class Controls:
         self.random_event_timer = 0
         self.params_memory.remove("CurrentRandomEvent")
 
-    CC = car.CarControl.new_message()
-    CC.enabled = self.enabled
-
     # Update Experimental Mode
-    if self.conditional_experimental_mode:
+    if self.frogpilot_variables.conditional_experimental_mode:
       self.experimental_mode = frogpilot_plan.conditionalExperimental
 
     # Gear Check
@@ -704,11 +863,11 @@ class Controls:
     signal_check = not ((CS.leftBlinker or CS.rightBlinker) and CS.vEgo < self.pause_lateral_on_signal and not CS.standstill)
 
     # Always on lateral
-    self.FPCC.alwaysOnLateral &= CS.cruiseState.available
-    self.FPCC.alwaysOnLateral |= CS.cruiseState.enabled or (CS.cruiseState.available and self.always_on_lateral_main)
-    self.FPCC.alwaysOnLateral &= self.driving_gear
-    self.FPCC.alwaysOnLateral &= signal_check
+    self.FPCC.alwaysOnLateral |= CS.cruiseState.enabled or self.always_on_lateral_main
     self.FPCC.alwaysOnLateral &= self.always_on_lateral
+    self.FPCC.alwaysOnLateral &= CS.cruiseState.available
+    self.FPCC.alwaysOnLateral &= self.driving_gear
+    self.FPCC.alwaysOnLateral &= not self.openpilot_crashed
 
     if self.FPCC.alwaysOnLateral:
       self.current_alert_types.append(ET.WARNING)
@@ -740,7 +899,7 @@ class Controls:
     if not self.joystick_mode:
       # accel PID loop
       pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, CS.vEgo, self.v_cruise_helper.v_cruise_kph * CV.KPH_TO_MS, self.frogpilot_variables)
-      t_since_plan = (self.sm.frame - self.sm.rcv_frame['longitudinalPlan']) * DT_CTRL
+      t_since_plan = (self.sm.frame - self.sm.recv_frame['longitudinalPlan']) * DT_CTRL
       actuators.accel = self.LoC.update(CC.longActive, CS, long_plan, pid_accel_limits, t_since_plan)
 
       # Steering PID loop and lateral MPC
@@ -752,9 +911,9 @@ class Controls:
                                                                              model_data=self.sm['modelV2'])
     else:
       lac_log = log.ControlsState.LateralDebugState.new_message()
-      if self.sm.rcv_frame['testJoystick'] > 0:
+      if self.sm.recv_frame['testJoystick'] > 0:
         # reset joystick if it hasn't been received in a while
-        should_reset_joystick = (self.sm.frame - self.sm.rcv_frame['testJoystick'])*DT_CTRL > 0.2
+        should_reset_joystick = (self.sm.frame - self.sm.recv_frame['testJoystick'])*DT_CTRL > 0.2
         if not should_reset_joystick:
           joystick_axes = self.sm['testJoystick'].axes
         else:
@@ -834,7 +993,7 @@ class Controls:
 
     CC.cruiseControl.override = self.enabled and not CC.longActive and self.CP.openpilotLongitudinalControl
     CC.cruiseControl.cancel = CS.cruiseState.enabled and (not self.enabled or not self.CP.pcmCruise)
-    if self.joystick_mode and self.sm.rcv_frame['testJoystick'] > 0 and self.sm['testJoystick'].buttons[0]:
+    if self.joystick_mode and self.sm.recv_frame['testJoystick'] > 0 and self.sm['testJoystick'].buttons[0]:
       CC.cruiseControl.cancel = True
 
     speeds = self.sm['longitudinalPlan'].speeds
@@ -885,10 +1044,7 @@ class Controls:
       hudControl.visualAlert = current_alert.visual_alert
 
     if not self.CP.passive and self.initialized:
-      # send car controls over can
-      now_nanos = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)
-      self.last_actuators, can_sends = self.CI.apply(CC, now_nanos, self.frogpilot_variables)
-      self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
+      self.last_actuators = self.card.controls_update(CC, self.frogpilot_variables)
       CC.actuatorsOutput = self.last_actuators
       if self.CP.steerControlType == car.CarParams.SteerControlType.angle:
         self.steer_limited = abs(CC.actuators.steeringAngleDeg - CC.actuatorsOutput.steeringAngleDeg) > \
@@ -936,7 +1092,7 @@ class Controls:
     controlsState.cumLagMs = -self.rk.remaining * 1000.
     controlsState.startMonoTime = int(start_time * 1e9)
     controlsState.forceDecel = bool(force_decel)
-    controlsState.canErrorCounter = self.can_rcv_cum_timeout_counter
+    controlsState.canErrorCounter = self.card.can_rcv_cum_timeout_counter
     controlsState.experimentalMode = self.experimental_mode
 
     lat_tuning = self.CP.lateralTuning.which()
@@ -951,13 +1107,9 @@ class Controls:
 
     self.pm.send('controlsState', dat)
 
-    # carState
     car_events = self.events.to_msg()
-    cs_send = messaging.new_message('carState')
-    cs_send.valid = CS.canValid
-    cs_send.carState = CS
-    cs_send.carState.events = car_events
-    self.pm.send('carState', cs_send)
+
+    self.card.state_publish(car_events)
 
     # onroadEvents - logged every second or on change
     if (self.sm.frame % int(1. / DT_CTRL) == 0) or (self.events.names != self.events_prev):
@@ -966,13 +1118,6 @@ class Controls:
       ce_send.onroadEvents = car_events
       self.pm.send('onroadEvents', ce_send)
     self.events_prev = self.events.names.copy()
-
-    # carParams - logged every 50 seconds (> 1 per segment)
-    if (self.sm.frame % int(50. / DT_CTRL) == 0):
-      cp_send = messaging.new_message('carParams')
-      cp_send.valid = True
-      cp_send.carParams = self.CP
-      self.pm.send('carParams', cp_send)
 
     # carControl
     cc_send = messaging.new_message('carControl')
@@ -1015,7 +1160,7 @@ class Controls:
     while not evt.is_set():
       self.is_metric = self.params.get_bool("IsMetric")
       if self.CP.openpilotLongitudinalControl:
-         if not self.conditional_experimental_mode:
+         if not self.frogpilot_variables.conditional_experimental_mode:
            self.experimental_mode = self.params.get_bool("ExperimentalMode") or SpeedLimitController.experimental_mode
       else:
         self.experimental_mode = False
@@ -1025,8 +1170,7 @@ class Controls:
 
       # Update FrogPilot parameters
       if self.params_memory.get_bool("FrogPilotTogglesUpdated"):
-        updateFrogPilotParams = threading.Thread(target=self.update_frogpilot_params)
-        updateFrogPilotParams.start()
+        self.update_frogpilot_params()
 
   def controlsd_thread(self):
     e = threading.Event()
@@ -1041,23 +1185,24 @@ class Controls:
       t.join()
 
   def update_frogpilot_params(self):
-    self.conditional_experimental_mode = self.params.get_bool("ConditionalExperimental")
+    self.frogpilot_variables.conditional_experimental_mode = self.params.get_bool("ConditionalExperimental")
 
     custom_alerts = self.params.get_bool("CustomAlerts")
-    self.green_light_alert = self.params.get_bool("GreenLightAlert") and custom_alerts
-    self.lead_departing_alert = self.params.get_bool("LeadDepartingAlert") and custom_alerts
-    self.loud_blindspot_alert = self.params.get_bool("LoudBlindspotAlert") and custom_alerts
-    self.speed_limit_alert = self.params.get_bool("SpeedLimitChangedAlert") and self.params.get_bool("SpeedLimitController") and custom_alerts
+    self.green_light_alert = custom_alerts and self.params.get_bool("GreenLightAlert")
+    self.lead_departing_alert = custom_alerts and self.params.get_bool("LeadDepartingAlert")
+    self.loud_blindspot_alert = custom_alerts and self.params.get_bool("LoudBlindspotAlert")
 
     custom_theme = self.params.get_bool("CustomTheme")
     custom_sounds = self.params.get_int("CustomSounds") if custom_theme else 0
     frog_sounds = custom_sounds == 1
-    self.goat_scream = self.params.get_bool("GoatScream") and frog_sounds
+    self.goat_scream = frog_sounds and self.params.get_bool("GoatScream")
 
-    self.frogpilot_variables.experimental_mode_via_lkas = self.params.get_bool("ExperimentalModeViaLKAS") and self.params.get_bool("ExperimentalModeActivation")
+    experimental_mode_activation = self.params.get_bool("ExperimentalModeActivation")
+    self.frogpilot_variables.experimental_mode_via_distance = experimental_mode_activation and self.params.get_bool("ExperimentalModeViaDistance")
+    self.frogpilot_variables.experimental_mode_via_lkas = experimental_mode_activation and self.params.get_bool("ExperimentalModeViaLKAS")
 
     lateral_tune = self.params.get_bool("LateralTune")
-    self.force_auto_tune = self.params.get_float("ForceAutoTune") and lateral_tune
+    self.force_auto_tune = lateral_tune and self.params.get_float("ForceAutoTune")
     stock_steer_ratio = self.params.get_float("SteerRatioStock")
     self.steer_ratio = self.params.get_float("SteerRatio") if lateral_tune else stock_steer_ratio
     self.use_custom_steer_ratio = self.steer_ratio != stock_steer_ratio
@@ -1066,7 +1211,7 @@ class Controls:
     self.frogpilot_variables.long_pitch = self.params.get_bool("LongPitch")
 
     longitudinal_tune = self.params.get_bool("LongitudinalTune")
-    self.frogpilot_variables.sport_plus = self.params.get_int("AccelerationProfile") == 3 and longitudinal_tune
+    self.frogpilot_variables.sport_plus = longitudinal_tune and self.params.get_int("AccelerationProfile") == 3
 
     self.lane_detection = self.params.get_bool("LaneDetection") and self.params.get_bool("NudgelessLaneChange")
     self.lane_detection_width = self.params.get_int("LaneDetectionWidth") * (1 if self.is_metric else CV.FOOT_TO_METER) / 10 if self.lane_detection else 0
@@ -1076,12 +1221,19 @@ class Controls:
 
     quality_of_life = self.params.get_bool("QOLControls")
     self.pause_lateral_on_signal = self.params.get_int("PauseLateralOnSignal") * (CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS) if quality_of_life else 0
-    self.frogpilot_variables.reverse_cruise_increase = self.params.get_bool("ReverseCruise") and quality_of_life
-    self.frogpilot_variables.set_speed_limit = self.params.get_bool("SetSpeedLimit") and quality_of_life
+    self.frogpilot_variables.reverse_cruise_increase = quality_of_life and self.params.get_bool("ReverseCruise")
     self.frogpilot_variables.set_speed_offset = self.params.get_int("SetSpeedOffset") * (1 if self.is_metric else CV.MPH_TO_KPH) if quality_of_life else 0
 
     self.random_events = self.params.get_bool("RandomEvents")
     self.frogpilot_variables.use_ev_tables = self.params.get_bool("EVTable")
+
+    self.speed_limit_controller = self.params.get_bool("SpeedLimitController")
+    self.frogpilot_variables.force_mph_dashboard = self.speed_limit_controller and self.params.get_bool("ForceMPHDashboard")
+    self.frogpilot_variables.set_speed_limit = self.speed_limit_controller and self.params.get_bool("SetSpeedLimit")
+    self.speed_limit_alert = self.speed_limit_controller and self.params.get_bool("SpeedLimitChangedAlert")
+    self.speed_limit_confirmation = self.speed_limit_controller and self.params.get_bool("SLCConfirmation")
+    self.speed_limit_confirmation_lower = self.speed_limit_confirmation and self.params.get_bool("SLCConfirmationLower")
+    self.speed_limit_confirmation_higher = self.speed_limit_confirmation and self.params.get_bool("SLCConfirmationHigher")
 
 def main():
   controls = Controls()

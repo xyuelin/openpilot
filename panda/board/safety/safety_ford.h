@@ -222,7 +222,8 @@ static void ford_rx_hook(const CANPacket_t *to_push) {
       // Disable controls if speeds from ABS and PCM ECUs are too far apart.
       // Signal: Veh_V_ActlEng
       float filtered_pcm_speed = ((GET_BYTE(to_push, 6) << 8) | GET_BYTE(to_push, 7)) * 0.01 / 3.6;
-      if (ABS(filtered_pcm_speed - ((float)vehicle_speed.values[0] / VEHICLE_SPEED_FACTOR)) > FORD_MAX_SPEED_DELTA) {
+      bool is_invalid_speed = ABS(filtered_pcm_speed - ((float)vehicle_speed.values[0] / VEHICLE_SPEED_FACTOR)) > FORD_MAX_SPEED_DELTA;
+      if (is_invalid_speed) {
         controls_allowed = false;
       }
     }
@@ -280,7 +281,7 @@ static bool ford_tx_hook(const CANPacket_t *to_send) {
     // Signal: AccBrkTot_A_Rq
     int accel = ((GET_BYTE(to_send, 0) & 0x1FU) << 8) | GET_BYTE(to_send, 1);
     // Signal: CmbbDeny_B_Actl
-    int cmbb_deny = GET_BIT(to_send, 37U);
+    bool cmbb_deny = GET_BIT(to_send, 37U);
 
     bool violation = false;
     violation |= longitudinal_accel_checks(accel, FORD_LONG_LIMITS);
@@ -288,7 +289,7 @@ static bool ford_tx_hook(const CANPacket_t *to_send) {
     violation |= longitudinal_gas_checks(gas_pred, FORD_LONG_LIMITS);
 
     // Safety check for stock AEB
-    violation |= cmbb_deny != 0; // do not prevent stock AEB actuation
+    violation |= cmbb_deny; // do not prevent stock AEB actuation
 
     if (violation) {
       tx = false;
@@ -302,8 +303,8 @@ static bool ford_tx_hook(const CANPacket_t *to_send) {
     // Violation if resume button is pressed while controls not allowed, or
     // if cancel button is pressed when cruise isn't engaged.
     bool violation = false;
-    violation |= (GET_BIT(to_send, 8U) == 1U) && !cruise_engaged_prev;   // Signal: CcAslButtnCnclPress (cancel)
-    violation |= (GET_BIT(to_send, 25U) == 1U) && !controls_allowed;     // Signal: CcAsllButtnResPress (resume)
+    violation |= GET_BIT(to_send, 8U) && !cruise_engaged_prev;   // Signal: CcAslButtnCnclPress (cancel)
+    violation |= GET_BIT(to_send, 25U) && !controls_allowed;     // Signal: CcAsllButtnResPress (resume)
 
     if (violation) {
       tx = false;

@@ -11,6 +11,8 @@ from openpilot.selfdrive.car.hyundai.values import HyundaiFlags, CAR, DBC, CAN_G
                                                    CANFD_CAR, Buttons, CarControllerParams
 from openpilot.selfdrive.car.interfaces import CarStateBase
 
+from openpilot.selfdrive.frogpilot.functions.speed_limit_controller import SpeedLimitController
+
 PREV_BUTTON_SAMPLES = 8
 CLUSTER_SAMPLE_RATE = 20  # frames
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
@@ -65,9 +67,9 @@ class CarState(CarStateBase):
       speed_limit = cp.vl["Navi_HU"]["SpeedLim_Nav_Clu"]
       return speed_limit if speed_limit not in (0, 255) else 0
 
-  def update(self, cp, cp_cam, conditional_experimental_mode, frogpilot_variables):
+  def update(self, cp, cp_cam, frogpilot_variables):
     if self.CP.carFingerprint in CANFD_CAR:
-      return self.update_canfd(cp, cp_cam, conditional_experimental_mode, frogpilot_variables)
+      return self.update_canfd(cp, cp_cam, frogpilot_variables)
 
     ret = car.CarState.new_message()
     cp_cruise = cp_cam if self.CP.carFingerprint in CAMERA_SCC_CAR else cp
@@ -200,16 +202,15 @@ class CarState(CarStateBase):
     if frogpilot_variables.experimental_mode_via_lkas and ret.cruiseState.available and self.CP.flags & HyundaiFlags.CAN_LFA_BTN:
       lkas_pressed = cp.vl["BCM_PO_11"]["LFA_Pressed"]
       if lkas_pressed and not self.lkas_previously_pressed:
-        self.fpf.lkas_button_function(conditional_experimental_mode)
+        self.fpf.lkas_button_function(frogpilot_variables.conditional_experimental_mode)
       self.lkas_previously_pressed = lkas_pressed
 
-    self.slc.load_state()
-    self.slc.car_speed_limit = self.calculate_speed_limit(cp, cp_cam) * speed_conv
-    self.slc.write_car_state()
+    SpeedLimitController.car_speed_limit = self.calculate_speed_limit(cp, cp_cam) * speed_conv
+    SpeedLimitController.write_car_state()
 
     return ret
 
-  def update_canfd(self, cp, cp_cam, conditional_experimental_mode, frogpilot_variables):
+  def update_canfd(self, cp, cp_cam, frogpilot_variables):
     ret = car.CarState.new_message()
 
     self.is_metric = cp.vl["CRUISE_BUTTONS_ALT"]["DISTANCE_UNIT"] != 1
@@ -312,12 +313,11 @@ class CarState(CarStateBase):
     if frogpilot_variables.experimental_mode_via_lkas and ret.cruiseState.available:
       lkas_pressed = cp.vl[self.cruise_btns_msg_canfd]["LKAS_BTN"]
       if lkas_pressed and not self.lkas_previously_pressed:
-        self.fpf.lkas_button_function(conditional_experimental_mode)
+        self.fpf.lkas_button_function(frogpilot_variables.conditional_experimental_mode)
       self.lkas_previously_pressed = lkas_pressed
 
-    self.slc.load_state()
-    self.slc.car_speed_limit = self.calculate_speed_limit(cp, cp_cam) * speed_factor
-    self.slc.write_car_state()
+    SpeedLimitController.car_speed_limit = self.calculate_speed_limit(cp, cp_cam) * speed_factor
+    SpeedLimitController.write_car_state()
 
     return ret
 

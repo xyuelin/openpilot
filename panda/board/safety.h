@@ -94,8 +94,8 @@ bool get_longitudinal_allowed(void) {
 // Given a CRC-8 poly, generate a static lookup table to use with a fast CRC-8
 // algorithm. Called at init time for safety modes using CRC-8.
 void gen_crc_lookup_table_8(uint8_t poly, uint8_t crc_lut[]) {
-  for (int i = 0; i < 256; i++) {
-    uint8_t crc = i;
+  for (uint16_t i = 0U; i <= 0xFFU; i++) {
+    uint8_t crc = (uint8_t)i;
     for (int j = 0; j < 8; j++) {
       if ((crc & 0x80U) != 0U) {
         crc = (uint8_t)((crc << 1) ^ poly);
@@ -390,7 +390,8 @@ int set_safety_hooks(uint16_t mode, uint16_t param) {
 // convert a trimmed integer to signed 32 bit int
 int to_signed(int d, int bits) {
   int d_signed = d;
-  if (d >= (1 << MAX((bits - 1), 0))) {
+  int max_value = (1 << MAX((bits - 1), 0));
+  if (d >= max_value) {
     d_signed = d - (1 << MAX(bits, 0));
   }
   return d_signed;

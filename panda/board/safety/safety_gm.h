@@ -17,7 +17,7 @@ const LongitudinalLimits GM_ASCM_LONG_LIMITS = {
 };
 
 const LongitudinalLimits GM_ASCM_LONG_LIMITS_SPORT = {
-  .max_gas = 7168,
+  .max_gas = 8191,
   .min_gas = 5500,
   .inactive_gas = 5500,
   .max_brake = 400,
@@ -31,7 +31,7 @@ const LongitudinalLimits GM_CAM_LONG_LIMITS = {
 };
 
 const LongitudinalLimits GM_CAM_LONG_LIMITS_SPORT = {
-  .max_gas = 8650,
+  .max_gas = 8848,
   .min_gas = 5610,
   .inactive_gas = 5650,
   .max_brake = 400,
@@ -115,7 +115,7 @@ static void handle_gm_wheel_buttons(const CANPacket_t *to_push) {
   if (button == GM_BTN_CANCEL) {
     controls_allowed = false;
   }
-  
+
   cruise_button_prev = button;
 }
 
@@ -154,8 +154,8 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
     }
 
     if ((addr == 0xC9) && ((gm_hw == GM_CAM) || (gm_hw == GM_SDGM))) {
-      acc_main_on = GET_BIT(to_push, 29U) != 0U;
-      brake_pressed = GET_BIT(to_push, 40U) != 0U;
+      acc_main_on = GET_BIT(to_push, 29U);
+      brake_pressed = GET_BIT(to_push, 40U);
     }
 
     if (addr == 0x1C4) {
@@ -220,7 +220,7 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
     int desired_torque = ((GET_BYTE(to_send, 0) & 0x7U) << 8) + GET_BYTE(to_send, 1);
     desired_torque = to_signed(desired_torque, 11);
 
-    bool steer_req = (GET_BIT(to_send, 3U) != 0U);
+    bool steer_req = GET_BIT(to_send, 3U);
 
     if (steer_torque_cmd_checks(desired_torque, steer_req, GM_STEERING_LIMITS)) {
       tx = false;
@@ -236,7 +236,7 @@ static bool gm_tx_hook(const CANPacket_t *to_send) {
 
   // GAS/REGEN: safety check
   if (addr == 0x2CB) {
-    bool apply = GET_BIT(to_send, 0U) != 0U;
+    bool apply = GET_BIT(to_send, 0U);
     int gas_regen = ((GET_BYTE(to_send, 1) & 0x1U) << 13) + ((GET_BYTE(to_send, 2) & 0xFFU) << 5) + ((GET_BYTE(to_send, 3) & 0xF8U) >> 3);
 
     bool violation = false;
@@ -283,7 +283,7 @@ static int gm_fwd_hook(int bus_num, int addr) {
       // block lkas message and acc messages if gm_cam_long, forward all others
       bool is_lkas_msg = (addr == 0x180);
       bool is_acc_msg = (addr == 0x315) || (addr == 0x2CB) || (addr == 0x370);
-      int block_msg = is_lkas_msg || (is_acc_msg && gm_cam_long);
+      bool block_msg = is_lkas_msg || (is_acc_msg && gm_cam_long);
       if (!block_msg) {
         bus_fwd = 0;
       }
@@ -312,7 +312,7 @@ static safety_config gm_init(uint16_t param) {
     } else {
       gm_long_limits = &GM_ASCM_LONG_LIMITS;
     }
-  } else if ((gm_hw == GM_CAM) || (gm_hw == GM_SDGM)) {
+  } else if (gm_hw == GM_CAM) {
     if (sport_mode) {
       gm_long_limits = &GM_CAM_LONG_LIMITS_SPORT;
     } else {

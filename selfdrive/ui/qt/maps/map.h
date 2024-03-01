@@ -82,6 +82,8 @@ private:
   // FrogPilot variables
   Params params;
 
+  int previous_map_style;
+
 private slots:
   void updateState(const UIState &s);
 

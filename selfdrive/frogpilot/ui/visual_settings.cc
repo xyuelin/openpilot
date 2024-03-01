@@ -32,12 +32,14 @@ FrogPilotVisualsPanel::FrogPilotVisualsPanel(SettingsWindow *parent) : FrogPilot
     {"BlindSpotPath", "Blind Spot Path", "Visualize your blind spots with a red path when another vehicle is detected nearby.", ""},
     {"FPSCounter", "FPS Counter", "Display the Frames Per Second (FPS) of your onroad UI for monitoring system performance.", ""},
     {"LeadInfo", "Lead Info and Logics", "Get detailed information about the vehicle ahead, including speed and distance, and the logic behind your following distance.", ""},
+    {"PedalsOnUI", "Pedals Being Pressed", "Display which pedals are being pressed on the onroad UI below the steering wheel icon.", ""},
     {"RoadNameUI", "Road Name", "See the name of the road you're on at the bottom of your screen. Sourced from OpenStreetMap.", ""},
-    {"UseVienna", "Use Vienna Speed Limit Signs", "Use the Vienna (EU) speed limit style signs as opposed to MUTCD (US).", ""},
 
     {"DriverCamera", "Driver Camera On Reverse", "Show the driver's camera feed when you shift to reverse.", "../assets/img_driver_face_static.png"},
 
     {"ModelUI", "Model UI", "Personalize how the model's visualizations appear on your screen.", "../assets/offroad/icon_calibration.png"},
+    {"DynamicPathWidth", "Dynamic Path Width", "Have the path width dynamically adjust based on the current engagement state of openpilot.", ""},
+    {"HideLeadMarker", "Hide Lead Marker", "Hide the lead marker from the onroad UI.", ""},
     {"LaneLinesWidth", "Lane Lines", "Adjust the visual thickness of lane lines on your display.\n\nDefault matches the MUTCD average of 4 inches.", ""},
     {"PathEdgeWidth", "Path Edges", "Adjust the width of the path edges shown on your UI to represent different driving modes and statuses.\n\nDefault is 20% of the total path.\n\nBlue = Navigation\nLight Blue = Always On Lateral\nGreen = Default with 'FrogPilot Colors'\nLight Green = Default with stock colors\nOrange = Experimental Mode Active\nYellow = Conditional Overriden", ""},
     {"PathWidth", "Path Width", "Customize the width of the driving path shown on your UI.\n\nDefault matches the width of a 2019 Lexus ES 350.", ""},
@@ -50,11 +52,18 @@ FrogPilotVisualsPanel::FrogPilotVisualsPanel(SettingsWindow *parent) : FrogPilot
     {"DriveStats", "Drive Stats In Home Screen", "Display your device's drive stats in the home screen.", ""},
     {"FullMap", "Full Sized Map", "Maximize the size of the map in the onroad UI.", ""},
     {"HideSpeed", "Hide Speed", "Hide the speed indicator in the onroad UI. Additional toggle allows it to be hidden/shown via tapping the speed itself.", ""},
-    {"ShowSLCOffset", "Show Speed Limit Offset", "Show the speed limit offset seperated from the speed limit in the onroad UI when using 'Speed Limit Controller'.", ""},
+    {"MapStyle", "Map Style", "Use a custom map style to be used for 'Navigate on openpilot'.", ""},
     {"WheelSpeed", "Use Wheel Speed", "Use the wheel speed metric as opposed to the artificial speed.", ""},
 
     {"RandomEvents", "Random Events", "Enjoy a bit of unpredictability with random events that can occur during certain driving conditions.", "../frogpilot/assets/toggle_icons/icon_random.png"},
-    {"ScreenBrightness", "Screen Brightness", "Customize your screen brightness.", "../frogpilot/assets/toggle_icons/icon_light.png"},
+
+    {"ScreenManagement", "Screen Management", "Manage your screen's brightness, timeout settings, and hide specific onroad UI elements.", "../frogpilot/assets/toggle_icons/icon_light.png"},
+    {"HideUIElements", "Hide UI Elements", "Hide the selected UI elements from the onroad screen.", ""},
+    {"ScreenBrightness", "Screen Brightness", "Customize your screen brightness when offroad.", ""},
+    {"ScreenBrightnessOnroad", "Screen Brightness (Onroad)", "Customize your screen brightness when onroad.", ""},
+    {"ScreenRecorder", "Screen Recorder", "Enable the screen recorder button to record the screen.", ""},
+    {"ScreenTimeout", "Screen Timeout", "Customize how long it takes for your screen to turn off.", ""},
+    {"ScreenTimeoutOnroad", "Screen Timeout (Onroad)", "Customize how long it takes for your screen to turn off after going onroad.", ""},
 
     {"WheelIcon", "Steering Wheel Icon", "Replace the default steering wheel icon with a custom design, adding a unique touch to your interface.", "../assets/offroad/icon_openpilot.png"},
   };
@@ -71,10 +80,12 @@ FrogPilotVisualsPanel::FrogPilotVisualsPanel(SettingsWindow *parent) : FrogPilot
         }
       });
       toggle = alertVolumeControlToggle;
-    } else if (alertVolumeControlKeys.find(param) != alertVolumeControlKeys.end() && param != "WarningImmediateVolume") {
-      toggle = new FrogPilotParamValueControl(param, title, desc, icon, 0, 100, std::map<int, QString>(), this, false, "%");
-    } else if (param == "WarningImmediateVolume") {
-      toggle = new FrogPilotParamValueControl(param, title, desc, icon, 25, 100, std::map<int, QString>(), this, false, "%");
+    } else if (alertVolumeControlKeys.find(param) != alertVolumeControlKeys.end()) {
+      if (param == "WarningImmediateVolume") {
+        toggle = new FrogPilotParamValueControl(param, title, desc, icon, 25, 100, std::map<int, QString>(), this, false, "%");
+      } else {
+        toggle = new FrogPilotParamValueControl(param, title, desc, icon, 0, 100, std::map<int, QString>(), this, false, "%");
+      }
 
     } else if (param == "CameraView") {
       std::vector<QString> cameraOptions{tr("Auto"), tr("Standard"), tr("Wide"), tr("Driver")};
@@ -163,29 +174,74 @@ FrogPilotVisualsPanel::FrogPilotVisualsPanel(SettingsWindow *parent) : FrogPilot
         for (auto &[key, toggle] : toggles) {
           toggle->setVisible(qolKeys.find(key.c_str()) != qolKeys.end());
         }
+        mapStyleButton->setVisible(true);
       });
       toggle = qolToggle;
     } else if (param == "HideSpeed") {
       std::vector<QString> hideSpeedToggles{"HideSpeedUI"};
       std::vector<QString> hideSpeedToggleNames{tr("Control Via UI")};
       toggle = new FrogPilotParamToggleControl(param, title, desc, icon, hideSpeedToggles, hideSpeedToggleNames);
-    } else if (param == "ShowSLCOffset") {
-      std::vector<QString> slcOffsetToggles{"ShowSLCOffsetUI"};
-      std::vector<QString> slcOffsetToggleNames{tr("Control Via UI")};
-      toggle = new FrogPilotParamToggleControl(param, title, desc, icon, slcOffsetToggles, slcOffsetToggleNames);
+    } else if (param == "MapStyle") {
+      QMap<int, QString> styleMap = {
+        {0, tr("Stock openpilot")},
+        {1, tr("Mapbox Streets")},
+        {2, tr("Mapbox Outdoors")},
+        {3, tr("Mapbox Light")},
+        {4, tr("Mapbox Dark")},
+        {5, tr("Mapbox Satellite")},
+        {6, tr("Mapbox Satellite Streets")},
+        {7, tr("Mapbox Navigation Day")},
+        {8, tr("Mapbox Navigation Night")},
+        {9, tr("Mapbox Traffic Night")},
+        {10, tr("mike854's (Satellite hybrid)")},
+      };
 
-    } else if (param == "ScreenBrightness") {
+      QStringList styles = styleMap.values();
+
+      mapStyleButton = new ButtonControl(title, tr("SELECT"), desc);
+      QObject::connect(mapStyleButton, &ButtonControl::clicked, this, [this, styleMap]() {
+        QStringList styles = styleMap.values();
+        QString selection = MultiOptionDialog::getSelection(tr("Select a map style"), styles, "", this);
+        if (!selection.isEmpty()) {
+          int selectedStyle = styleMap.key(selection);
+          params.putInt("MapStyle", selectedStyle);
+          mapStyleButton->setValue(selection);
+          updateToggles();
+        }
+      });
+
+      int currentStyle = params.getInt("MapStyle");
+      mapStyleButton->setValue(styleMap[currentStyle]);
+
+      addItem(mapStyleButton);
+
+    } else if (param == "ScreenManagement") {
+      FrogPilotParamManageControl *screenToggle = new FrogPilotParamManageControl(param, title, desc, icon, this);
+      QObject::connect(screenToggle, &FrogPilotParamManageControl::manageButtonClicked, this, [this]() {
+        parentToggleClicked();
+        for (auto &[key, toggle] : toggles) {
+          toggle->setVisible(screenKeys.find(key.c_str()) != screenKeys.end());
+        }
+      });
+      toggle = screenToggle;
+    } else if (param == "HideUIElements") {
+      std::vector<QString> uiElementsToggles{"HideAlerts", "HideMapIcon", "HideMaxSpeed"};
+      std::vector<QString> uiElementsToggleNames{tr("Alerts"), tr("Max Map Icon"), tr("Max Speed")};
+      toggle = new FrogPilotParamToggleControl(param, title, desc, icon, uiElementsToggles, uiElementsToggleNames);
+    } else if (param == "ScreenBrightness" || param == "ScreenBrightnessOnroad") {
       std::map<int, QString> brightnessLabels;
       for (int i = 0; i <= 101; ++i) {
         brightnessLabels[i] = i == 0 ? "Screen Off" : i == 101 ? "Auto" : QString::number(i) + "%";
       }
       toggle = new FrogPilotParamValueControl(param, title, desc, icon, 0, 101, brightnessLabels, this, false);
+    } else if (param == "ScreenTimeout" || param == "ScreenTimeoutOnroad") {
+      toggle = new FrogPilotParamValueControl(param, title, desc, icon, 5, 60, std::map<int, QString>(), this, false, " seconds");
 
     } else if (param == "WheelIcon") {
       std::vector<QString> wheelToggles{"RotatingWheel"};
       std::vector<QString> wheelToggleNames{tr("Rotating")};
-      std::map<int, QString> steeringWheelLabels = {{0, "Stock"}, {1, "Lexus"}, {2, "Toyota"}, {3, "Frog"}, {4, "Rocket"}, {5, "Hyundai"}, {6, "Stalin"}};
-      toggle = new FrogPilotParamValueToggleControl(param, title, desc, icon, 0, 6, steeringWheelLabels, this, true, "", 1, wheelToggles, wheelToggleNames);
+      std::map<int, QString> steeringWheelLabels = {{-1, "None"}, {0, "Stock"}, {1, "Lexus"}, {2, "Toyota"}, {3, "Frog"}, {4, "Rocket"}, {5, "Hyundai"}, {6, "Stalin"}};
+      toggle = new FrogPilotParamValueToggleControl(param, title, desc, icon, -1, 6, steeringWheelLabels, this, true, "", 1, wheelToggles, wheelToggleNames);
 
     } else {
       toggle = new ParamControl(param, title, desc, icon, this);
@@ -216,7 +272,7 @@ FrogPilotVisualsPanel::FrogPilotVisualsPanel(SettingsWindow *parent) : FrogPilot
     QObject::connect(toggles[key], &ToggleControl::toggleFlipped, [this, key]() {
       if (started || key == "DriveStats") {
         if (FrogPilotConfirmationDialog::toggle("Reboot required to take effect.", "Reboot Now", this)) {
-          Hardware::reboot();
+          Hardware::soft_reboot();
         }
       }
     });
@@ -224,6 +280,7 @@ FrogPilotVisualsPanel::FrogPilotVisualsPanel(SettingsWindow *parent) : FrogPilot
 
   QObject::connect(device(), &Device::interactiveTimeout, this, &FrogPilotVisualsPanel::hideSubToggles);
   QObject::connect(parent, &SettingsWindow::closeParentToggle, this, &FrogPilotVisualsPanel::hideSubToggles);
+  QObject::connect(parent, &SettingsWindow::closeSubParentToggle, this, &FrogPilotVisualsPanel::hideSubSubToggles);
   QObject::connect(parent, &SettingsWindow::updateMetric, this, &FrogPilotVisualsPanel::updateMetric);
 
   hideSubToggles();
@@ -239,7 +296,7 @@ void FrogPilotVisualsPanel::updateState(const UIState &s) {
 void FrogPilotVisualsPanel::updateToggles() {
   std::thread([this]() {
     paramsMemory.putBool("FrogPilotTogglesUpdated", true);
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
     paramsMemory.putBool("FrogPilotTogglesUpdated", false);
   }).detach();
 }
@@ -283,21 +340,42 @@ void FrogPilotVisualsPanel::updateMetric() {
 }
 
 void FrogPilotVisualsPanel::parentToggleClicked() {
+  mapStyleButton->setVisible(false);
+
   openParentToggle();
 }
 
+void FrogPilotVisualsPanel::subParentToggleClicked() {
+  mapStyleButton->setVisible(false);
+
+  openSubParentToggle();
+}
+
 void FrogPilotVisualsPanel::hideSubToggles() {
+  mapStyleButton->setVisible(false);
+
   for (auto &[key, toggle] : toggles) {
     bool subToggles = alertVolumeControlKeys.find(key.c_str()) != alertVolumeControlKeys.end() ||
                       customAlertsKeys.find(key.c_str()) != customAlertsKeys.end() ||
                       customOnroadUIKeys.find(key.c_str()) != customOnroadUIKeys.end() ||
                       customThemeKeys.find(key.c_str()) != customThemeKeys.end() ||
                       modelUIKeys.find(key.c_str()) != modelUIKeys.end() ||
-                      qolKeys.find(key.c_str()) != qolKeys.end();
+                      qolKeys.find(key.c_str()) != qolKeys.end() ||
+                      screenKeys.find(key.c_str()) != screenKeys.end();
     toggle->setVisible(!subToggles);
   }
 
   closeParentToggle();
+}
+
+void FrogPilotVisualsPanel::hideSubSubToggles() {
+  for (auto &[key, toggle] : toggles) {
+    bool isVisible = false;
+    toggle->setVisible(isVisible);
+  }
+
+  closeSubParentToggle();
+  update();
 }
 
 void FrogPilotVisualsPanel::hideEvent(QHideEvent *event) {

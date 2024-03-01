@@ -132,6 +132,7 @@ struct CarEvent @0x9b1657f34caf3ad3 {
     turningLeft @131;
     turningRight @132;
     vCruise69 @133;
+    yourFrogTriedToKillMe @134;
 
     radarCanErrorDEPRECATED @15;
     communityFeatureDisallowedDEPRECATED @62;
@@ -426,9 +427,10 @@ struct CarControl {
       promptDistracted @8;
 
       # Random Events
-      fart @9;
-      firefox @10;
-      noice @11;
+      angry @9;
+      fart @10;
+      firefox @11;
+      noice @12;
     }
   }
 
@@ -618,12 +620,14 @@ struct CarParams {
     body @27;
     hyundaiCanfd @28;
     volkswagenMqbEvo @29;
+    chryslerCusw @30;
   }
 
   enum SteerControlType {
     torque @0;
     angle @1;
-    curvature @2;
+
+    curvatureDEPRECATED @2;
   }
 
   enum TransmissionType {

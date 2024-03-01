@@ -52,9 +52,10 @@ public:
   static void reboot() { std::system("sudo reboot"); }
   static void soft_reboot() {
     std::system("echo 894000.i2c | sudo tee /sys/bus/platform/drivers/i2c_geni/unbind");
-    std::system("echo 894000.i2c | sudo tee /sys/bus/platform/drivers/i2c_geni/unbind");
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     std::system("echo 894000.i2c | sudo tee /sys/bus/platform/drivers/i2c_geni/bind");
-    std::system("sudo systemctl restart comma"); 
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::system("sudo systemctl restart comma");
   }
   static void poweroff() { std::system("sudo poweroff"); }
   static void set_brightness(int percent) {
@@ -78,6 +79,7 @@ public:
     std::map<std::string, std::string> ret = {
       {"/BUILD", util::read_file("/BUILD")},
       {"lsblk", util::check_output("lsblk -o NAME,SIZE,STATE,VENDOR,MODEL,REV,SERIAL")},
+      {"SOM ID", util::read_file("/sys/devices/platform/vendor/vendor:gpio-som-id/som_id")},
     };
 
     std::string bs = util::check_output("abctl --boot_slot");

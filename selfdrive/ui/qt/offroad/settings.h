@@ -33,6 +33,7 @@ signals:
 
   // FrogPilot signals
   void closeParentToggle();
+  void closeSubParentToggle();
   void updateMetric();
 private:
   QPushButton *sidebar_alert_widget;
@@ -41,7 +42,9 @@ private:
   QStackedWidget *panel_widget;
 
   // FrogPilot variables
-  bool frogPilotTogglesOpen;
+  bool parentToggleOpen;
+  bool subParentToggleOpen;
+
   int previousScrollPosition;
 };
 
@@ -108,9 +111,11 @@ private:
 
   // FrogPilot variables
   void automaticUpdate();
+  void updateState();
 
   ButtonControl *updateTime;
 
+  bool isParked;
   int schedule;
   int time;
 };

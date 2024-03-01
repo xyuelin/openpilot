@@ -20,9 +20,9 @@ class CarInterface(CarInterfaceBase):
     ret.steerRatio = 13.
     return ret
 
-  def _update(self, c, conditional_experimental_mode, frogpilot_variables):
+  def _update(self, c, frogpilot_variables):
     self.sm.update(0)
-    gps_sock = 'gpsLocationExternal' if self.sm.rcv_frame['gpsLocationExternal'] > 1 else 'gpsLocation'
+    gps_sock = 'gpsLocationExternal' if self.sm.recv_frame['gpsLocationExternal'] > 1 else 'gpsLocation'
 
     ret = car.CarState.new_message()
     ret.vEgo = self.sm[gps_sock].speed

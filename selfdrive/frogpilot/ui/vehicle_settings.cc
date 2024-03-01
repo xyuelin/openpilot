@@ -66,14 +66,13 @@ QStringList getCarNames(const QString &carMake) {
 FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(SettingsWindow *parent) : FrogPilotListWidget(parent) {
   selectMakeButton = new ButtonControl(tr("Select Make"), tr("SELECT"));
   QObject::connect(selectMakeButton, &ButtonControl::clicked, [this]() {
-    std::string currentMake = params.get("CarMake");
     QStringList makes = {
       "Acura", "Audi", "BMW", "Buick", "Cadillac", "Chevrolet", "Chrysler", "Dodge", "Ford", "GM", "GMC",
       "Genesis", "Honda", "Hyundai", "Infiniti", "Jeep", "Kia", "Lexus", "Lincoln", "MAN", "Mazda",
       "Mercedes", "Nissan", "Ram", "SEAT", "Subaru", "Tesla", "Toyota", "Volkswagen", "Volvo", "Škoda",
     };
 
-    QString newMakeSelection = MultiOptionDialog::getSelection(tr("Select a Make"), makes, QString::fromStdString(currentMake), this);
+    QString newMakeSelection = MultiOptionDialog::getSelection(tr("Select a Make"), makes, "", this);
     if (!newMakeSelection.isEmpty()) {
       carMake = newMakeSelection;
       params.putNonBlocking("CarMake", carMake.toStdString());
@@ -86,8 +85,7 @@ FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(SettingsWindow *parent) : FrogPil
   selectModelButton = new ButtonControl(tr("Select Model"), tr("SELECT"));
   QString modelSelection = QString::fromStdString(params.get("CarModel"));
   QObject::connect(selectModelButton, &ButtonControl::clicked, [this]() {
-    std::string currentModel = params.get("CarModel");
-    QString newModelSelection = MultiOptionDialog::getSelection(tr("Select a Model"), models, QString::fromStdString(currentModel), this);
+    QString newModelSelection = MultiOptionDialog::getSelection(tr("Select a Model"), models, "", this);
     if (!newModelSelection.isEmpty()) {
       params.putNonBlocking("CarModel", newModelSelection.toStdString());
       selectModelButton->setValue(newModelSelection);
@@ -109,7 +107,7 @@ FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(SettingsWindow *parent) : FrogPil
     {"CrosstrekTorque", "Subaru Crosstrek Torque Increase", "Increases the maximum allowed torque for the Subaru Crosstrek.", ""},
 
     {"LockDoors", "Lock Doors In Drive", "Automatically lock the doors when in drive and unlock when in park.", ""},
-    {"LongitudinalTune", "Longitudinal Tune", "Use a custom Toyota longitudinal tune.", ""},
+    {"LongitudinalTune", "Longitudinal Tune", "Use a custom Toyota longitudinal tune.\n\nCydia = More focused on TSS-P vehicles but works for all Toyotas\n\nDragonPilot = Focused on TSS2 vehicles\n\nFrogPilot = Takes the best of both worlds with some personal tweaks focused around my 2019 Lexus ES 350", ""},
     {"SNGHack", "Stop and Go Hack", "Enable the 'Stop and Go' hack for vehicles without stock stop and go functionality.", ""},
   };
 
@@ -128,7 +126,7 @@ FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(SettingsWindow *parent) : FrogPil
       QObject::connect(static_cast<FrogPilotButtonsParamControl*>(toggle), &FrogPilotButtonsParamControl::buttonClicked, [this]() {
         if (started) {
           if (FrogPilotConfirmationDialog::toggle("Reboot required to take effect.", "Reboot Now", this)) {
-            Hardware::reboot();
+            Hardware::soft_reboot();
           }
         }
       });
@@ -137,6 +135,7 @@ FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(SettingsWindow *parent) : FrogPil
       toggle = new ParamControl(param, title, desc, icon, this);
     }
 
+    toggle->setVisible(false);
     addItem(toggle);
     toggles[param.toStdString()] = toggle;
 
@@ -154,7 +153,7 @@ FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(SettingsWindow *parent) : FrogPil
     QObject::connect(toggles[key], &ToggleControl::toggleFlipped, [this]() {
       if (started) {
         if (FrogPilotConfirmationDialog::toggle("Reboot required to take effect.", "Reboot Now", this)) {
-          Hardware::reboot();
+          Hardware::soft_reboot();
         }
       }
     });
@@ -187,7 +186,7 @@ void FrogPilotVehiclesPanel::updateState(const UIState &s) {
 void FrogPilotVehiclesPanel::updateToggles() {
   std::thread([this]() {
     paramsMemory.putBool("FrogPilotTogglesUpdated", true);
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
     paramsMemory.putBool("FrogPilotTogglesUpdated", false);
   }).detach();
 }

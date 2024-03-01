@@ -2,21 +2,50 @@ import numpy as np
 
 from openpilot.common.numpy_fast import interp
 from openpilot.common.params import Params
+from openpilot.system.hardware import HARDWARE
+
 
 params = Params()
 params_memory = Params("/dev/shm/params")
 
+DEFAULT_MODEL = "los-angeles"
+
+CRUISING_SPEED = 5  # Roughly the speed cars go when not touching the gas while in drive
+THRESHOLD = 5       # Time threshold (0.25s)
+
 # Acceleration profiles - Credit goes to the DragonPilot team!
-                 # MPH = [0.,  35,   35,  40,    40,  45,    45,  67,    67,   67, 123]
-A_CRUISE_MIN_BP_CUSTOM = [0., 2.0, 2.01, 11., 11.01, 18., 18.01, 28., 28.01,  33., 55.]
+                 # MPH = [0., 18,  36,  63,  94]
+A_CRUISE_MIN_BP_CUSTOM = [0., 8., 16., 28., 42.]
                  # MPH = [0., 6.71, 13.4, 17.9, 24.6, 33.6, 44.7, 55.9, 67.1, 123]
 A_CRUISE_MAX_BP_CUSTOM = [0.,    3,   6.,   8.,  11.,  15.,  20.,  25.,  30., 55.]
 
-A_CRUISE_MIN_VALS_ECO = [-0.480, -0.480, -0.40, -0.40, -0.40, -0.36, -0.32, -0.28, -0.28, -0.25, -0.25]
-A_CRUISE_MAX_VALS_ECO = [3.5, 3.3, 1.7, 1.1, .76, .62, .47, .36, .28, .09]
+A_CRUISE_MIN_VALS_ECO = [-0.001, -0.010, -0.28, -0.56, -0.56]
+A_CRUISE_MAX_VALS_ECO = [3.5, 3.2, 2.3, 2.0, 1.15, .80, .58, .36, .30, .091]
 
-A_CRUISE_MIN_VALS_SPORT = [-0.500, -0.500, -0.42, -0.42, -0.42, -0.42, -0.40, -0.35, -0.35, -0.30, -0.30]
-A_CRUISE_MAX_VALS_SPORT = [3.5, 3.5, 3.0, 2.6, 1.4, 1.0, 0.7, 0.6, .38, .2]
+A_CRUISE_MIN_VALS_SPORT = [-0.50, -0.52, -0.55, -0.57, -0.60]
+A_CRUISE_MAX_VALS_SPORT = [3.5, 3.5, 3.3, 2.8, 1.5, 1.0, .75, .6, .38, .2]
+
+
+class MovingAverageCalculator:
+  def __init__(self):
+    self.data = []
+    self.total = 0
+
+  def add_data(self, value):
+    if len(self.data) == THRESHOLD:
+      self.total -= self.data.pop(0)
+    self.data.append(value)
+    self.total += value
+
+  def get_moving_average(self):
+    if len(self.data) == 0:
+      return None
+    return self.total / len(self.data)
+
+  def reset_data(self):
+    self.data = []
+    self.total = 0
+
 
 class FrogPilotFunctions:
   @staticmethod
@@ -67,16 +96,17 @@ class FrogPilotFunctions:
     params_memory.put_bool("PersonalityChangedViaUI", False)
 
   @staticmethod
-  def lkas_button_function(conditional_experimental_mode):
-    if conditional_experimental_mode:
-      # Set "CEStatus" to work with "Conditional Experimental Mode"
-      conditional_status = params_memory.get_int("CEStatus")
-      override_value = 0 if conditional_status in (1, 2, 3, 4) else 1 if conditional_status >= 5 else 2
-      params_memory.put_int("CEStatus", override_value)
-    else:
-      experimental_mode = params.get_bool("ExperimentalMode")
-      # Invert the value of "ExperimentalMode"
-      params.put_bool("ExperimentalMode", not experimental_mode)
+  def update_cestatus():
+    # Set "CEStatus" to work with "Conditional Experimental Mode"
+    conditional_status = params_memory.get_int("CEStatus")
+    override_value = 0 if conditional_status in (1, 2, 3, 4) else 1 if conditional_status >= 5 else 2
+    params_memory.put_int("CEStatus", override_value)
+
+  @staticmethod
+  def update_experimental_mode():
+    experimental_mode = params.get_bool("ExperimentalMode")
+    # Invert the value of "ExperimentalMode"
+    params.put_bool("ExperimentalMode", not experimental_mode)
 
   @staticmethod
   def road_curvature(modelData, v_ego):

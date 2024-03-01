@@ -96,7 +96,7 @@ def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, lead_distance
     "ACA_StaACC": acc_hud_status,
     "ACA_Zeitluecke": 2,
     "ACA_V_Wunsch": set_speed,
-    "ACA_gemZeitl": 1 if personality_profile == 0 else 3 if personality_profile == 1 else 5,
+    "ACA_gemZeitl": lead_distance,
     "ACA_PrioDisp": 3,
     # TODO: restore dynamic pop-to-foreground/highlight behavior with ACA_PrioDisp and ACA_AnzDisplay
     # TODO: ACA_kmh_mph handling probably needed to resolve rounding errors in displayed setpoint

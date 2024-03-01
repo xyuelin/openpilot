@@ -1,26 +1,30 @@
+import json
+
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.params import Params
-import json
+
+from openpilot.selfdrive.frogpilot.functions.frogpilot_functions import CRUISING_SPEED
+
 
 params = Params()
 params_memory = Params("/dev/shm/params")
 
 class SpeedLimitController:
   car_speed_limit: float = 0  # m/s
-  lst_speed_limit: float = 0  # m/s
   map_speed_limit: float = 0  # m/s
   nav_speed_limit: float = 0  # m/s
+  prv_speed_limit: float = 0  # m/s
 
   def __init__(self) -> None:
     self.update_frogpilot_params()
 
-    self.write_car_state()
-    self.write_map_state()
-    self.write_nav_state()
+  def update_speed_limits(self):
+    self.car_speed_limit = json.loads(params_memory.get("CarSpeedLimit") or '0')
+    self.map_speed_limit = json.loads(params_memory.get("MapSpeedLimit") or '0')
+    self.nav_speed_limit = json.loads(params_memory.get("NavSpeedLimit") or '0')
 
-  def update_current_max_velocity(self, max_v: float, load_state: bool = True, write_state: bool = True) -> None:
-    if load_state:
-      self.load_state()
+    if params_memory.get_bool("FrogPilotTogglesUpdated"):
+      self.update_frogpilot_params()
 
   @property
   def offset(self) -> float:
@@ -36,43 +40,45 @@ class SpeedLimitController:
   @property
   def speed_limit(self) -> float:
     limits = [self.car_speed_limit, self.map_speed_limit, self.nav_speed_limit]
-    filtered_limits = [limit for limit in limits if limit > 0]
+    filtered_limits = [limit for limit in limits if limit > CRUISING_SPEED]
 
-    if self.highest and filtered_limits:
+    if not filtered_limits:
+      return 0
+
+    if self.highest:
       return max(filtered_limits)
-    if self.lowest and filtered_limits:
+    elif self.lowest:
       return min(filtered_limits)
 
-    priority_map = {1: "car", 2: "nav", 3: "map"}
-    priorities = [self.speed_limit_priority1, self.speed_limit_priority2, self.speed_limit_priority3]
-    valid_priorities = [priority_map[p] for p in priorities if p in priority_map]
+    speed_limits = {
+      "Dashboard": self.car_speed_limit,
+      "Navigation": self.nav_speed_limit,
+      "Offline Maps": self.map_speed_limit,
+    }
 
-    for source in valid_priorities:
-      limit = getattr(self, f"{source}_speed_limit", 0)
-      if limit > 0:
-        self.prv_speed_limit = limit
+    for priority in self.priorities:
+      limit = speed_limits.get(priority)
+      if limit and limit > CRUISING_SPEED:
+        self.update_previous_limit(limit)
         return limit
 
     if self.use_previous_limit:
-      if self.lst_speed_limit != self.prv_speed_limit:
-        params.put_float("PreviousSpeedLimit", self.prv_speed_limit)
-      self.lst_speed_limit = self.prv_speed_limit
       return self.prv_speed_limit
 
     return 0
 
-  @property
-  def desired_speed_limit(self):
-    return self.speed_limit + self.offset if self.speed_limit else 0
+  def update_previous_limit(self, new_limit: float):
+    if self.prv_speed_limit != new_limit:
+      params.put_float("PreviousSpeedLimit", new_limit)
+      self.prv_speed_limit = new_limit
 
   @property
-  def experimental_mode(self):
+  def desired_speed_limit(self) -> float:
+    return self.speed_limit + self.offset if self.speed_limit != 0 else 0
+
+  @property
+  def experimental_mode(self) -> bool:
     return self.speed_limit == 0 and self.use_experimental_mode
-
-  def load_state(self):
-    self.car_speed_limit = json.loads(params_memory.get("CarSpeedLimit"))
-    self.map_speed_limit = json.loads(params_memory.get("MapSpeedLimit"))
-    self.nav_speed_limit = json.loads(params_memory.get("NavSpeedLimit"))
 
   def write_car_state(self):
     params_memory.put("CarSpeedLimit", json.dumps(self.car_speed_limit))
@@ -91,12 +97,16 @@ class SpeedLimitController:
     self.offset3 = params.get_int("Offset3") * conversion
     self.offset4 = params.get_int("Offset4") * conversion
 
-    self.speed_limit_priority1 = params.get_int("SLCPriority1")
-    self.speed_limit_priority2 = params.get_int("SLCPriority2")
-    self.speed_limit_priority3 = params.get_int("SLCPriority3")
+    speed_limit_priority1 = params.get("SLCPriority1", encoding='utf-8')
 
-    self.highest = self.speed_limit_priority1 == 4
-    self.lowest = self.speed_limit_priority1 == 5
+    self.highest = speed_limit_priority1 == "Highest"
+    self.lowest = speed_limit_priority1 == "Lowest"
+
+    self.priorities = [
+      speed_limit_priority1,
+      params.get("SLCPriority2", encoding='utf-8'),
+      params.get("SLCPriority3", encoding='utf-8'),
+    ]
 
     slc_fallback = params.get_int("SLCFallback")
     self.use_experimental_mode = slc_fallback == 1

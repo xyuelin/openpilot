@@ -100,7 +100,27 @@ private:
   QPixmap settings_img;
 };
 
-// FrogPilot buttons
+class PedalIcons : public QWidget {
+  Q_OBJECT
+
+public:
+  explicit PedalIcons(QWidget *parent = 0);
+  void updateState();
+
+private:
+  void paintEvent(QPaintEvent *event) override;
+
+  QPixmap brake_pedal_img;
+  QPixmap gas_pedal_img;
+
+  UIScene &scene;
+
+  bool accelerating;
+  bool decelerating;
+
+  float acceleration;
+};
+
 class PersonalityButton : public QPushButton {
 public:
   explicit PersonalityButton(QWidget *parent = 0);
@@ -165,6 +185,7 @@ private:
   void updateFrogPilotWidgets(QPainter &p);
 
   void drawLeadInfo(QPainter &p);
+  void drawSLCConfirmation(QPainter &p);
   void drawStatusBar(QPainter &p);
   void drawTurnSignals(QPainter &p);
 
@@ -174,6 +195,7 @@ private:
   UIScene &scene;
 
   Compass *compass_img;
+  PedalIcons *pedal_icons;
   PersonalityButton *personality_btn;
   ScreenRecorder *recorder_btn;
 
@@ -190,10 +212,13 @@ private:
   bool leadInfo;
   bool mapOpen;
   bool onroadAdjustableProfiles;
+  bool pedalsOnUI;
+  bool rightHandDrive;
   bool roadNameUI;
   bool showDriverCamera;
   bool showSLCOffset;
   bool slcOverridden;
+  bool speedLimitController;
   bool turnSignalLeft;
   bool turnSignalRight;
   bool useViennaSLCSign;
@@ -207,7 +232,6 @@ private:
   float slcSpeedLimitOffset;
   float speedConversion;
 
-  int bearingDeg;
   int cameraView;
   int conditionalSpeed;
   int conditionalSpeedLead;

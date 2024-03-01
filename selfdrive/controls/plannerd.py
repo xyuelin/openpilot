@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import threading
 from cereal import car
 from openpilot.common.params import Params
 from openpilot.common.realtime import Priority, config_realtime_process
@@ -30,23 +29,21 @@ def plannerd_thread():
     CP = msg
   cloudlog.info("plannerd got CarParams: %s", CP.carName)
 
-  frogpilot_planner = FrogPilotPlanner(params, params_memory)
+  frogpilot_planner = FrogPilotPlanner(CP, params, params_memory)
   longitudinal_planner = LongitudinalPlanner(CP)
   pm = messaging.PubMaster(['longitudinalPlan', 'uiPlan', 'frogpilotPlan'])
   sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'radarState', 'modelV2', 'frogpilotNavigation'],
-                           poll=['radarState', 'modelV2'], ignore_avg_freq=['radarState'])
+                           poll='modelV2', ignore_avg_freq=['radarState'])
 
   while True:
     sm.update()
-
     if sm.updated['modelV2']:
       longitudinal_planner.update(sm, frogpilot_planner, params_memory)
       longitudinal_planner.publish(sm, pm, frogpilot_planner)
       publish_ui_plan(sm, pm, longitudinal_planner)
 
     if params_memory.get_bool("FrogPilotTogglesUpdated"):
-      updateFrogPilotParams = threading.Thread(target=frogpilot_planner.update_frogpilot_params, args=(params, params_memory))
-      updateFrogPilotParams.start()
+      frogpilot_planner.update_frogpilot_params(params)
 
 def main():
   plannerd_thread()

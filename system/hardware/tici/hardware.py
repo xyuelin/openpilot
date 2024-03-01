@@ -139,7 +139,7 @@ class Tici(HardwareBase):
     sudo_write("894000.i2c", "/sys/bus/platform/drivers/i2c_geni/unbind")
     time.sleep(0.5)
     sudo_write("894000.i2c", "/sys/bus/platform/drivers/i2c_geni/bind")
-    time.sleep(0.5)    
+    time.sleep(0.5)
     os.system("sudo systemctl restart comma")
 
   def uninstall(self):
@@ -357,7 +357,6 @@ class Tici(HardwareBase):
                          gpu=(("gpu0-usr", "gpu1-usr"), 1000),
                          mem=("ddr-usr", 1000),
                          bat=(None, 1),
-                         ambient=("xo-therm-adc", 1000),
                          pmic=(("pm8998_tz", "pm8005_tz"), 1000))
 
   def set_screen_brightness(self, percentage):

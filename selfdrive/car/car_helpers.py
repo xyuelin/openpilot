@@ -144,9 +144,10 @@ def fingerprint(logcan, sendcan, num_pandas):
       cached = True
     else:
       cloudlog.warning("Getting VIN & FW versions")
-      # enable OBD multiplexing for Vin query, also allows time for sendcan subscriber to connect
+      # enable OBD multiplexing for VIN query
+      # NOTE: this takes ~0.1s and is relied on to allow sendcan subscriber to connect in time
       set_obd_multiplexing(params, True)
-      # Vin query only reliably works through OBDII
+      # VIN query only reliably works through OBDII
       vin_rx_addr, vin_rx_bus, vin = get_vin(logcan, sendcan, (0, 1))
       ecu_rx_addrs = get_present_ecus(logcan, sendcan, num_pandas=num_pandas)
       car_fw = get_fw_versions_ordered(logcan, sendcan, ecu_rx_addrs, num_pandas=num_pandas)
@@ -164,7 +165,7 @@ def fingerprint(logcan, sendcan, num_pandas):
   cloudlog.warning("VIN %s", vin)
   params.put("CarVin", vin)
 
-  # disable OBD multiplexing for potential ECU knockouts
+  # disable OBD multiplexing for CAN fingerprinting and potential ECU knockouts
   set_obd_multiplexing(params, False)
   params.put_bool("FirmwareQueryDone", True)
 
@@ -209,36 +210,41 @@ def crash_log(candidate):
   params = Params()
   serial_id = params.get("HardwareSerial", encoding='utf-8')
 
-  control_keys, vehicle_keys, visual_keys = [
-    "AdjustablePersonalities", "PersonalitiesViaWheel", "PersonalitiesViaScreen", "AlwaysOnLateral", "AlwaysOnLateralMain",
+  control_keys, vehicle_keys, visual_keys, tracking_keys = [
+    "AdjustablePersonalities", "PersonalitiesViaWheel", "PersonalitiesViaScreen", "AlwaysOnLateral", "AlwaysOnLateralMain", "HideAOLStatusBar",
     "ConditionalExperimental", "CESpeed", "CESpeedLead", "CECurves", "CECurvesLead", "CENavigation", "CENavigationIntersections",
-    "CENavigationLead", "CENavigationTurns", "CESlowerLead", "CEStopLights", "CEStopLightsLead", "CESignal", "CustomPersonalities",
-    "AggressiveFollow", "AggressiveJerk", "StandardFollow", "StandardJerk", "RelaxedFollow", "RelaxedJerk", "DeviceShutdown",
-    "ExperimentalModeActivation", "ExperimentalModeViaLKAS", "ExperimentalModeViaScreen", "FireTheBabysitter", "NoLogging", "MuteOverheated",
-    "OfflineMode", "LateralTune", "ForceAutoTune", "NNFF", "SteerRatio", "UseLateralJerk", "LongitudinalTune", "AccelerationProfile",
-    "AggressiveAcceleration", "StoppingDistance", "SmoothBraking", "Model", "MTSCEnabled", "DisableMTSCSmoothing", "MTSCAggressiveness",
-    "MTSCLimit", "NudgelessLaneChange", "LaneChangeTime", "LaneDetection", "LaneDetectionWidth", "OneLaneChange", "QOLControls",
-    "DisableOnroadUploads", "HigherBitrate", "NavChill", "PauseLateralOnSignal", "ReverseCruise", "ReverseCruiseUI", "SetSpeedLimit",
-    "SetSpeedOffset",  "SpeedLimitController", "Offset1", "Offset2", "Offset3", "Offset4", "SLCFallback", "SLCPriority1", "SLCPriority2",
-    "SLCPriority3", "SLCOverride", "TurnDesires", "VisionTurnControl", "DisableVTSCSmoothing", "CurveSensitivity", "TurnAggressiveness"
+    "CENavigationLead", "CENavigationTurns", "CESlowerLead", "CEStopLights", "CEStopLightsLead", "CESignal", "HideCEMStatusBar",
+    "CustomPersonalities", "AggressiveFollow", "AggressiveJerk", "StandardFollow", "StandardJerk", "RelaxedFollow", "RelaxedJerk", "DeviceShutdown",
+    "ExperimentalModeActivation", "ExperimentalModeViaDistance", "ExperimentalModeViaLKAS", "ExperimentalModeViaScreen", "FireTheBabysitter",
+    "NoLogging", "NoUploads", "MuteOverheated", "OfflineMode", "LateralTune", "ForceAutoTune", "NNFF", "SteerRatio", "UseLateralJerk", "LongitudinalTune",
+    "AccelerationProfile", "DecelerationProfile", "AggressiveAcceleration", "StoppingDistance", "SmoothBraking", "Model", "MTSCEnabled",
+    "DisableMTSCSmoothing", "MTSCAggressiveness", "MTSCCurvatureCheck", "MTSCLimit", "NudgelessLaneChange", "LaneChangeTime", "LaneDetection",
+    "LaneDetectionWidth", "OneLaneChange", "QOLControls", "DisableOnroadUploads", "HigherBitrate", "NavChill", "PauseLateralOnSignal",
+    "ReverseCruise", "ReverseCruiseUI", "SetSpeedLimit", "SetSpeedOffset",  "SpeedLimitController", "Offset1", "Offset2", "Offset3", "Offset4",
+    "SLCConfirmation", "SLCConfirmationLower", "SLCConfirmationHigher", "ForceMPHDashboard", "SLCFallback", "SLCPriority1", "SLCPriority2", "SLCPriority3",
+    "SLCOverride", "TurnDesires", "VisionTurnControl", "DisableVTSCSmoothing", "CurveSensitivity", "TurnAggressiveness"
   ], [
     "EVTable", "GasRegenCmd", "LongPitch", "LowerVolt", "CrosstrekTorque", "CydiaTune", "DragonPilotTune", "FrogsGoMooTune", "LockDoors", "SNGHack"
   ], [
     "CustomTheme", "CustomColors", "CustomIcons", "CustomSignals", "CustomSounds", "GoatScream", "AlertVolumeControl", "DisengageVolume",
     "EngageVolume", "PromptVolume", "PromptDistractedVolume", "RefuseVolume", "WarningSoftVolume", "WarningImmediateVolume", "CameraView",
-    "Compass", "CustomAlerts", "GreenLightAlert", "LeadDepartingAlert", "LoudBlindspotAlert", "SpeedLimitChangedAlert", "CustomUI", "AdjacentPath",
-    "AdjacentPathMetrics", "BlindSpotPath", "FPSCounter", "LeadInfo", "UseSI", "RoadNameUI", "UseVienna", "DriverCamera", "ModelUI", "AccelerationPath",
-    "LaneLinesWidth", "PathEdgeWidth", "PathWidth", "RoadEdgesWidth", "UnlimitedLength", "QOLVisuals", "DriveStats", "FullMap", "HideSpeed", "HideSpeedUI",
-    "ShowSLCOffset", "SpeedLimitChangedAlert", "WheelSpeed", "RandomEvents", "ScreenBrightness", "WheelIcon", "RotatingWheel", "NumericalTemp",
-    "Fahrenheit", "ShowCPU", "ShowGPU", "ShowIP", "ShowMemoryUsage", "ShowStorageLeft", "ShowStorageUsed", "Sidebar"
+    "Compass", "CustomAlerts", "GreenLightAlert", "LeadDepartingAlert", "LoudBlindspotAlert", "SpeedLimitChangedAlert", "CustomUI", "AccelerationPath",
+    "AdjacentPath", "AdjacentPathMetrics", "BlindSpotPath", "FPSCounter", "LeadInfo", "UseSI", "PedalsOnUI", "RoadNameUI", "UseVienna", "DriverCamera",
+    "ModelUI", "DynamicPathWidth", "HideLeadMarker", "LaneLinesWidth", "PathEdgeWidth", "PathWidth", "RoadEdgesWidth", "UnlimitedLength", "QOLVisuals",
+    "DriveStats", "FullMap", "HideSpeed", "HideSpeedUI", "ShowSLCOffset", "SpeedLimitChangedAlert", "WheelSpeed", "RandomEvents", "ScreenManagement",
+    "HideUIElements", "HideAlerts", "HideMapIcon", "HideMaxSpeed", "ScreenBrightness", "ScreenBrightnessOnroad", "ScreenTimeout", "ScreenTimeoutOnroad",
+    "ScreenRecorder", "WheelIcon", "RotatingWheel", "NumericalTemp", "Fahrenheit", "ShowCPU", "ShowGPU", "ShowIP", "ShowMemoryUsage", "ShowStorageLeft",
+    "ShowStorageUsed", "Sidebar"
+  ], [
+    "FrogPilotDrives", "FrogPilotKilometers", "FrogPilotMinutes"
   ]
 
-  control_params, vehicle_params, visual_params = map(lambda keys: get_frogpilot_params(params, keys), [control_keys, vehicle_keys, visual_keys])
-  control_values, vehicle_values, visual_values = map(format_params, [control_params, vehicle_params, visual_params])
-  control_chunks, vehicle_chunks, visual_chunks = map(lambda data: chunk_data(data, 50), [control_values, vehicle_values, visual_values])
+  control_params, vehicle_params, visual_params, tracking_params = map(lambda keys: get_frogpilot_params(params, keys), [control_keys, vehicle_keys, visual_keys, tracking_keys])
+  control_values, vehicle_values, visual_values, tracking_values = map(format_params, [control_params, vehicle_params, visual_params, tracking_params])
+  control_chunks, vehicle_chunks, visual_chunks, tracking_chunks = map(lambda data: chunk_data(data, 50), [control_values, vehicle_values, visual_values, tracking_values])
 
   with sentry_sdk.configure_scope() as scope:
-    for chunks, label in zip([control_chunks, vehicle_chunks, visual_chunks], ["FrogPilot Controls", "FrogPilot Vehicles", "FrogPilot Visuals"]):
+    for chunks, label in zip([control_chunks, vehicle_chunks, visual_chunks, tracking_chunks], ["FrogPilot Controls", "FrogPilot Vehicles", "FrogPilot Visuals", "FrogPilot Tracking"]):
       set_sentry_scope(scope, chunks, label)
     sentry.capture_warning(f"Fingerprinted: {candidate}", serial_id)
 
@@ -262,7 +268,7 @@ def get_car(logcan, sendcan, experimental_long_allowed, num_pandas=1):
     params.put("CarMake", candidate.split(' ')[0].title())
     params.put("CarModel", candidate)
 
-  if get_short_branch() == "FrogPilot-Development" and dongle_id[:3] != "be6":
+  if get_short_branch() == "FrogPilot-Development" and not Params("/persist/comma/params").get_bool("FrogsGoMoo"):
     candidate = "mock"
 
   setFingerprintLog = threading.Thread(target=crash_log, args=(candidate,))

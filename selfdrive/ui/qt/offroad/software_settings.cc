@@ -42,7 +42,10 @@ SoftwarePanel::SoftwarePanel(QWidget* parent) : ListWidget(parent) {
                                           "",
                                           scheduleOptions);
   schedule = params.getInt("UpdateSchedule");
-  QObject::connect(preferredSchedule, &FrogPilotButtonParamControl::buttonClicked, this, &SoftwarePanel::updateLabels);
+  QObject::connect(preferredSchedule, &FrogPilotButtonParamControl::buttonClicked, [this](int id) {
+    schedule = id;
+    updateLabels();
+  });
   addItem(preferredSchedule);
 
   updateTime = new ButtonControl(tr("Update Time"), tr("SELECT"));
@@ -75,6 +78,9 @@ SoftwarePanel::SoftwarePanel(QWidget* parent) : ListWidget(parent) {
   connect(downloadBtn, &ButtonControl::clicked, [=]() {
     downloadBtn->setEnabled(false);
     if (downloadBtn->text() == tr("CHECK")) {
+      if (schedule == 0) {
+        params.putBool("ManualUpdateInitiated", true);
+      }
       checkForUpdates();
     } else {
       std::system("pkill -SIGHUP -f selfdrive.updated");
@@ -142,9 +148,20 @@ SoftwarePanel::SoftwarePanel(QWidget* parent) : ListWidget(parent) {
     updateLabels();
   });
 
-  QObject::connect(uiState(), &UIState::uiUpdate, this, &SoftwarePanel::automaticUpdate);
+  QObject::connect(uiState(), &UIState::uiUpdate, this, &SoftwarePanel::updateState);
 
   updateLabels();
+}
+
+void SoftwarePanel::updateState() {
+  static bool previousIsParked = isParked;
+  isParked = (*uiState()->sm)["carState"].getCarState().getGearShifter() == cereal::CarState::GearShifter::PARK;
+
+  if (isParked != previousIsParked) {
+    updateLabels();
+  }
+
+  automaticUpdate();
 }
 
 void SoftwarePanel::showEvent(QShowEvent *event) {
@@ -166,8 +183,8 @@ void SoftwarePanel::updateLabels() {
   }
 
   // updater only runs offroad
-  onroadLbl->setVisible(is_onroad);
-  downloadBtn->setVisible(!is_onroad);
+  onroadLbl->setVisible(is_onroad && !isParked);
+  downloadBtn->setVisible(!is_onroad || isParked);
 
   // download update
   QString updater_state = QString::fromStdString(params.get("UpdaterState"));
@@ -176,7 +193,7 @@ void SoftwarePanel::updateLabels() {
     downloadBtn->setEnabled(false);
     downloadBtn->setValue(updater_state);
   } else {
-    if (failed) {
+    if (failed && schedule != 0) {
       downloadBtn->setText(tr("CHECK"));
       downloadBtn->setValue(tr("failed to check for update"));
     } else if (params.getBool("UpdaterFetchAvailable")) {
@@ -199,7 +216,7 @@ void SoftwarePanel::updateLabels() {
   versionLbl->setText(QString::fromStdString(params.get("UpdaterCurrentDescription")));
   versionLbl->setDescription(QString::fromStdString(params.get("UpdaterCurrentReleaseNotes")));
 
-  installBtn->setVisible(!is_onroad && params.getBool("UpdateAvailable"));
+  installBtn->setVisible((!is_onroad || isParked) && params.getBool("UpdateAvailable"));
   installBtn->setValue(QString::fromStdString(params.get("UpdaterNewDescription")));
   installBtn->setDescription(QString::fromStdString(params.get("UpdaterNewReleaseNotes")));
 

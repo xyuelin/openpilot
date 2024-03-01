@@ -33,6 +33,7 @@ struct InitData {
   deviceType @3 :DeviceType;
   version @4 :Text;
   gitCommit @10 :Text;
+  gitCommitDate @21 :Text;
   gitBranch @11 :Text;
   gitRemote @13 :Text;
 
@@ -362,7 +363,6 @@ struct DeviceState @0xa4d8b5af2aa492eb {
   cpuTempC @26 :List(Float32);
   gpuTempC @27 :List(Float32);
   memoryTempC @28 :Float32;
-  ambientTempC @30 :Float32;
   nvmeTempC @35 :List(Float32);
   modemTempC @36 :List(Float32);
   pmicTempC @39 :List(Float32);
@@ -435,6 +435,7 @@ struct DeviceState @0xa4d8b5af2aa492eb {
   chargingErrorDEPRECATED @17 :Bool;
   chargingDisabledDEPRECATED @18 :Bool;
   usbOnlineDEPRECATED @12 :Bool;
+  ambientTempCDEPRECATED @30 :Float32;
 }
 
 struct PandaState @0xa7649e2575e4591e {
@@ -603,6 +604,8 @@ struct RadarState @0x9a185389d6fdd05f {
 
   leadOne @3 :LeadData;
   leadTwo @4 :LeadData;
+  leadLeft @13 :LeadData;
+  leadRight @14 :LeadData;
   cumLagMs @5 :Float32;
 
   struct LeadData {
@@ -719,8 +722,8 @@ struct ControlsState @0x97ff69c53601abf1 {
     angleState @58 :LateralAngleState;
     debugState @59 :LateralDebugState;
     torqueState @60 :LateralTorqueState;
-    curvatureState @65 :LateralCurvatureState;
 
+    curvatureStateDEPRECATED @65 :LateralCurvatureState;
     lqrStateDEPRECATED @55 :LateralLQRState;
   }
 
@@ -1886,11 +1889,12 @@ struct QcomGnss @0xde94674b07ae51c1 {
 }
 
 struct Clocks {
-  bootTimeNanos @0 :UInt64;
-  monotonicNanos @1 :UInt64;
-  monotonicRawNanos @2 :UInt64;
-  wallTimeNanos @3 :UInt64;
-  modemUptimeMillis @4 :UInt64;
+  wallTimeNanos @3 :UInt64;  # unix epoch time
+
+  bootTimeNanosDEPRECATED @0 :UInt64;
+  monotonicNanosDEPRECATED @1 :UInt64;
+  monotonicRawNanosDEPRECATD @2 :UInt64;
+  modemUptimeMillisDEPRECATED @4 :UInt64;
 }
 
 struct LiveMpcData {
@@ -2331,9 +2335,9 @@ struct Event {
     # *********** Custom: reserved for forks ***********
     frogpilotCarControl @107 :Custom.FrogPilotCarControl;
     frogpilotDeviceState @108 :Custom.FrogPilotDeviceState;
-    frogpilotEvents @109 :Custom.FrogPilotEvents;
-    frogpilotNavigation @110 :Custom.FrogPilotNavigation;
-    frogpilotPlan @111 :Custom.FrogPilotPlan;
+    frogpilotNavigation @109 :Custom.FrogPilotNavigation;
+    frogpilotPlan @110 :Custom.FrogPilotPlan;
+    customReserved4 @111 :Custom.CustomReserved4;
     customReserved5 @112 :Custom.CustomReserved5;
     customReserved6 @113 :Custom.CustomReserved6;
     customReserved7 @114 :Custom.CustomReserved7;

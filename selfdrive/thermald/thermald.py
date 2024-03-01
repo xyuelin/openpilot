@@ -13,7 +13,6 @@ import psutil
 import cereal.messaging as messaging
 from cereal import log
 from cereal.services import SERVICE_LIST
-from openpilot.common.basedir import BASEDIR
 from openpilot.common.dict_helpers import strip_deprecated_keys
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
@@ -26,8 +25,6 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.thermald.power_monitoring import PowerMonitoring
 from openpilot.selfdrive.thermald.fan_controller import TiciFanController
 from openpilot.system.version import terms_version, training_version
-
-PREBUILT_FILE = os.path.join(BASEDIR, 'prebuilt')
 
 ThermalStatus = log.DeviceState.ThermalStatus
 NetworkType = log.DeviceState.NetworkType
@@ -86,7 +83,6 @@ def read_thermal(thermal_config):
   dat.deviceState.cpuTempC = [read_tz(z) / thermal_config.cpu[1] for z in thermal_config.cpu[0]]
   dat.deviceState.gpuTempC = [read_tz(z) / thermal_config.gpu[1] for z in thermal_config.gpu[0]]
   dat.deviceState.memoryTempC = read_tz(thermal_config.mem[0]) / thermal_config.mem[1]
-  dat.deviceState.ambientTempC = read_tz(thermal_config.ambient[0]) / thermal_config.ambient[1]
   dat.deviceState.pmicTempC = [read_tz(z) / thermal_config.pmic[1] for z in thermal_config.pmic[0]]
   return dat
 
@@ -169,7 +165,7 @@ def hw_state_thread(end_event, hw_queue):
 
 def thermald_thread(end_event, hw_queue) -> None:
   pm = messaging.PubMaster(['deviceState', 'frogpilotDeviceState'])
-  sm = messaging.SubMaster(["peripheralState", "gpsLocationExternal", "controlsState", "pandaStates"], poll=["pandaStates"])
+  sm = messaging.SubMaster(["peripheralState", "gpsLocationExternal", "controlsState", "pandaStates"], poll="pandaStates")
 
   count = 0
 
@@ -236,7 +232,7 @@ def thermald_thread(end_event, hw_queue) -> None:
         if TICI:
           fan_controller = TiciFanController()
 
-    elif (time.monotonic() - sm.rcv_time['pandaStates']) > DISCONNECT_TIMEOUT:
+    elif (time.monotonic() - sm.recv_time['pandaStates']) > DISCONNECT_TIMEOUT:
       if onroad_conditions["ignition"]:
         onroad_conditions["ignition"] = False
         cloudlog.error("panda timed out onroad")
@@ -255,8 +251,10 @@ def thermald_thread(end_event, hw_queue) -> None:
 
     msg.deviceState.freeSpacePercent = get_available_percent(default=100.0)
     msg.deviceState.memoryUsagePercent = int(round(psutil.virtual_memory().percent))
-    msg.deviceState.cpuUsagePercent = [int(round(n)) for n in psutil.cpu_percent(percpu=True)]
     msg.deviceState.gpuUsagePercent = int(round(HARDWARE.get_gpu_usage_percent()))
+    online_cpu_usage = [int(round(n)) for n in psutil.cpu_percent(percpu=True)]
+    offline_cpu_usage = [0., ] * (len(msg.deviceState.cpuTempC) - len(online_cpu_usage))
+    msg.deviceState.cpuUsagePercent = online_cpu_usage + offline_cpu_usage
 
     msg.deviceState.networkType = last_hw_state.network_type
     msg.deviceState.networkMetered = last_hw_state.network_metered
@@ -299,9 +297,8 @@ def thermald_thread(end_event, hw_queue) -> None:
       elif current_band.max_temp is not None and all_comp_temp > current_band.max_temp:
         thermal_status = list(THERMAL_BANDS.keys())[band_idx + 1]
 
-    if params.get_bool("FireTheBabysitter"):
-      if params.get_bool("MuteOverheated"):
-        thermal_status = ThermalStatus.green
+    if params.get_bool("FireTheBabysitter") and params.get_bool("MuteOverheated"):
+      thermal_status = ThermalStatus.green
 
     # **** starting logic ****
 
@@ -424,7 +421,6 @@ def thermald_thread(end_event, hw_queue) -> None:
     for i, temp in enumerate(msg.deviceState.gpuTempC):
       statlog.gauge(f"gpu{i}_temperature", temp)
     statlog.gauge("memory_temperature", msg.deviceState.memoryTempC)
-    statlog.gauge("ambient_temperature", msg.deviceState.ambientTempC)
     for i, temp in enumerate(msg.deviceState.pmicTempC):
       statlog.gauge(f"pmic{i}_temperature", temp)
     for i, temp in enumerate(last_hw_state.nvme_temps):
@@ -458,9 +454,6 @@ def thermald_thread(end_event, hw_queue) -> None:
     count += 1
     should_start_prev = should_start
 
-    # Create the prebuilt file if it doesn't exist
-    if not os.path.exists(PREBUILT_FILE):
-      os.system(f"touch {PREBUILT_FILE}")
 
 def main():
   hw_queue = queue.Queue(maxsize=1)

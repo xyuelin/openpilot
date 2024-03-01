@@ -76,6 +76,24 @@ public:
   }
 };
 
+class FrogPilotButtonControl : public AbstractControl {
+  Q_OBJECT
+
+public:
+  FrogPilotButtonControl(const QString &title, const QString &text, const QString &desc = "", QWidget *parent = nullptr);
+  inline void setText(const QString &text) { btn.setText(text); }
+  inline QString text() const { return btn.text(); }
+
+signals:
+  void clicked();
+
+public slots:
+  void setEnabled(bool enabled) { btn.setEnabled(enabled); }
+
+private:
+  QPushButton btn;
+};
+
 class FrogPilotButtonIconControl : public AbstractControl {
   Q_OBJECT
 
@@ -240,8 +258,9 @@ class FrogPilotParamManageControl : public ParamControl {
   Q_OBJECT
 
 public:
-  FrogPilotParamManageControl(const QString &param, const QString &title, const QString &desc, const QString &icon, QWidget *parent = nullptr)
+  FrogPilotParamManageControl(const QString &param, const QString &title, const QString &desc, const QString &icon, QWidget *parent = nullptr, bool hideToggle = false)
     : ParamControl(param, title, desc, icon, parent),
+      hideToggle(hideToggle),
       key(param.toStdString()),
       manageButton(new ButtonControl(tr(""), tr("MANAGE"), tr(""))) {
     hlayout->insertWidget(hlayout->indexOf(&toggle) - 1, manageButton);
@@ -251,11 +270,15 @@ public:
     });
 
     connect(manageButton, &ButtonControl::clicked, this, &FrogPilotParamManageControl::manageButtonClicked);
+
+    if (hideToggle) {
+      toggle.hide();
+    }
   }
 
   void refresh() {
     ParamControl::refresh();
-    manageButton->setVisible(params.getBool(key));
+    manageButton->setVisible(params.getBool(key) || hideToggle);
   }
 
   void showEvent(QShowEvent *event) override {
@@ -267,6 +290,7 @@ signals:
   void manageButtonClicked();
 
 private:
+  bool hideToggle;
   std::string key;
   Params params;
   ButtonControl *manageButton;
