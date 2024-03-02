@@ -6,7 +6,6 @@ import hypothesis.strategies as st
 from hypothesis import Phase, given, settings
 import importlib
 from parameterized import parameterized
-from types import SimpleNamespace
 
 from cereal import car, messaging
 from openpilot.common.realtime import DT_CTRL
