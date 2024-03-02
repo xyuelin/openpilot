@@ -135,7 +135,6 @@ def manager_init() -> None:
     ("EngageVolume", "100"),
     ("EVTable", "1"),
     ("ExperimentalModeActivation", "1"),
-    ("ExperimentalModeViaDistance", "0"),
     ("ExperimentalModeViaLKAS", "0"),
     ("ExperimentalModeViaScreen", "1"),
     ("Fahrenheit", "0"),
@@ -151,15 +150,8 @@ def manager_init() -> None:
     ("GasRegenCmd", "0"),
     ("GoatScream", "1"),
     ("GreenLightAlert", "0"),
-    ("HideAlerts", "0"),
-    ("HideAOLStatusBar", "0"),
-    ("HideCEMStatusBar", "0"),
-    ("HideLeadMarker", "0"),
-    ("HideMapIcon", "0"),
-    ("HideMaxSpeed", "0"),
     ("HideSpeed", "0"),
     ("HideSpeedUI", "0"),
-    ("HideUIElements", "0"),
     ("HigherBitrate", "0"),
     ("LaneChangeTime", "0"),
     ("LaneDetection", "1"),
@@ -212,11 +204,6 @@ def manager_init() -> None:
     ("RoadNameUI", "1"),
     ("RotatingWheel", "1"),
     ("ScreenBrightness", "101"),
-    ("ScreenBrightnessOnroad", "101"),
-    ("ScreenManagement", "1"),
-    ("ScreenRecorder", "1"),
-    ("ScreenTimeout", "30"),
-    ("ScreenTimeoutOnroad", "30"),
     ("SearchInput", "0"),
     ("SetSpeedLimit", "0"),
     ("SetSpeedOffset", "0"),
@@ -240,6 +227,7 @@ def manager_init() -> None:
     ("StandardFollow", "1.45"),
     ("StandardJerk", "1.0"),
     ("StoppingDistance", "0"),
+    ("StorageParamsSet", "0"),
     ("TurnAggressiveness", "100"),
     ("TurnDesires", "0"),
     ("UnlimitedLength", "1"),
@@ -265,8 +253,10 @@ def manager_init() -> None:
         params.put(k, v)
       else:
         params.put(k, params_storage.get(k))
-    else:
+    elif not params.get_bool("StorageParamsSet"):
       params_storage.put(k, params.get(k))
+
+  params.put_bool("StorageParamsSet", True)
 
   # Create folders needed for msgq
   try:
@@ -453,7 +443,7 @@ def main() -> None:
     HARDWARE.uninstall()
   elif params.get_bool("DoSoftReboot"):
     cloudlog.warning("softreboot")
-    HARDWARE.soft_reboot()
+    HARDWARE.reboot()
   elif params.get_bool("DoReboot"):
     cloudlog.warning("reboot")
     HARDWARE.reboot()

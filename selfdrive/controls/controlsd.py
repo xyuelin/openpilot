@@ -36,7 +36,7 @@ from openpilot.selfdrive.controls.lib.vehicle_model import VehicleModel
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.version import get_short_branch
 
-from openpilot.selfdrive.frogpilot.functions.frogpilot_functions import CRUISING_SPEED, THRESHOLD, MovingAverageCalculator
+from openpilot.selfdrive.frogpilot.functions.frogpilot_functions import CRUISING_SPEED
 
 from openpilot.selfdrive.frogpilot.functions.speed_limit_controller import SpeedLimitController
 
@@ -182,7 +182,6 @@ class Controls:
 
     self.driving_gear = False
     self.fcw_random_event_triggered = False
-    self.frogpilot_variables.disable_reverse_cruise_increase = False
     self.openpilot_crashed = False
     self.previously_enabled = False
     self.random_event_triggered = False
@@ -193,11 +192,8 @@ class Controls:
     self.previous_drive_distance = 0
     self.previous_lead_distance = 0
     self.previous_speed_limit = SpeedLimitController.desired_speed_limit
-    self.previous_v_cruise_cluster_kph = 0
     self.random_event_timer = 0
     self.speed_limit_changed_timer = 0
-
-    self.green_light_mac = MovingAverageCalculator()
 
     ignore = self.sensor_packets + ['testJoystick']
     if SIMULATION:
@@ -604,8 +600,7 @@ class Controls:
       green_light &= not CS.gasPressed
       green_light &= not self.sm['longitudinalPlan'].hasLead
 
-      self.green_light_mac.add_data(green_light)
-      if self.green_light_mac.get_moving_average() >= THRESHOLD:
+      if green_light:
         self.events.add(EventName.greenLight)
 
     # Lead departing alert
@@ -655,7 +650,7 @@ class Controls:
       # Cancel the confirmation message after 10 seconds
       if self.FPCC.speedLimitChanged:
         self.speed_limit_timer += 1
-        if self.speed_limit_timer >= 1000:
+        if self.speed_limit_timer * DT_CTRL >= 10:
           self.FPCC.speedLimitChanged = False
           self.speed_limit_timer = 0
       else:
@@ -835,15 +830,6 @@ class Controls:
 
     # FrogPilot functions
     frogpilot_plan = self.sm['frogpilotPlan']
-
-    # Disable reverse cruise increase on long press for PCM vehicles
-    if self.frogpilot_variables.reverse_cruise_increase and self.CP.pcmCruise and self.sm.frame % 50 == 0:
-      if self.v_cruise_helper.v_cruise_cluster_kph != self.previous_v_cruise_cluster_kph:
-        self.frogpilot_variables.disable_reverse_cruise_increase = True
-      else:
-        self.frogpilot_variables.disable_reverse_cruise_increase = False
-
-      self.previous_v_cruise_cluster_kph = self.v_cruise_helper.v_cruise_cluster_kph
 
     # Reset the Random Event flag
     if self.random_event_triggered:
@@ -1198,7 +1184,6 @@ class Controls:
     self.goat_scream = frog_sounds and self.params.get_bool("GoatScream")
 
     experimental_mode_activation = self.params.get_bool("ExperimentalModeActivation")
-    self.frogpilot_variables.experimental_mode_via_distance = experimental_mode_activation and self.params.get_bool("ExperimentalModeViaDistance")
     self.frogpilot_variables.experimental_mode_via_lkas = experimental_mode_activation and self.params.get_bool("ExperimentalModeViaLKAS")
 
     lateral_tune = self.params.get_bool("LateralTune")

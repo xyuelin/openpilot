@@ -4,6 +4,7 @@ from openpilot.common.numpy_fast import interp
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 
+
 params_memory = Params("/dev/shm/params")
 
 DEFAULT_MODEL = "los-angeles"
@@ -48,7 +49,7 @@ class MovingAverageCalculator:
 class FrogPilotFunctions:
   def __init__(self) -> None:
     self.params = Params()
-    
+
   @staticmethod
   def get_min_accel_eco(v_ego):
     return interp(v_ego, A_CRUISE_MIN_BP_CUSTOM, A_CRUISE_MIN_VALS_ECO)

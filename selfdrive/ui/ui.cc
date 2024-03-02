@@ -44,8 +44,8 @@ int get_path_length_idx(const cereal::XYZTData::Reader &line, const float path_h
 }
 
 void update_leads(UIState *s, const cereal::RadarState::Reader &radar_state, const cereal::XYZTData::Reader &line) {
-  for (int i = 0; i < 4; ++i) {
-    auto lead_data = (i == 0) ? radar_state.getLeadOne() : (i == 1) ? radar_state.getLeadTwo() : (i == 2) ? radar_state.getLeadLeft() : radar_state.getLeadRight();
+  for (int i = 0; i < 2; ++i) {
+    auto lead_data = (i == 0) ? radar_state.getLeadOne() : radar_state.getLeadTwo();
     if (lead_data.getStatus()) {
       float z = line.getZ()[get_path_length_idx(line, lead_data.getDRel())];
       calib_frame_to_full_frame(s, lead_data.getDRel(), -lead_data.getYRel(), z + 1.22, &s->scene.lead_vertices[i]);
@@ -238,6 +238,7 @@ static void update_state(UIState *s) {
     if (scene.rotating_wheel) {
       scene.steering_angle_deg = carState.getSteeringAngleDeg();
     }
+    scene.parked = carState.getGearShifter() == cereal::CarState::GearShifter::PARK;
   }
   if (sm.updated("controlsState")) {
     auto controlsState = sm["controlsState"].getControlsState();
@@ -315,15 +316,12 @@ void ui_update_frogpilot_params(UIState *s) {
   UIScene &scene = s->scene;
 
   scene.always_on_lateral = params.getBool("AlwaysOnLateral");
-  scene.hide_aol_status_bar = scene.always_on_lateral && params.getBool("HideAOLStatusBar");
-
   scene.camera_view = params.getInt("CameraView");
   scene.compass = params.getBool("Compass");
 
   scene.conditional_experimental = params.getBool("ConditionalExperimental");
-  scene.conditional_speed = scene.conditional_experimental ? params.getInt("CESpeed") : 0;
-  scene.conditional_speed_lead = scene.conditional_experimental ? params.getInt("CESpeedLead") : 0;
-  scene.hide_cem_status_bar = scene.conditional_experimental && params.getBool("HideCEMStatusBar");
+  scene.conditional_speed = params.getInt("CESpeed");
+  scene.conditional_speed_lead = params.getInt("CESpeedLead");
 
   bool custom_onroad_ui = params.getBool("CustomUI");
   scene.acceleration_path = custom_onroad_ui && params.getBool("AccelerationPath");
@@ -349,7 +347,6 @@ void ui_update_frogpilot_params(UIState *s) {
 
   scene.model_ui = params.getBool("ModelUI");
   scene.dynamic_path_width = scene.model_ui && params.getBool("DynamicPathWidth");
-  scene.hide_lead_marker = scene.model_ui && params.getBool("HideLeadMarker");
   scene.lane_line_width = params.getInt("LaneLinesWidth") * (scene.is_metric ? 1.0f : INCH_TO_CM) / 200.0f;
   scene.path_edge_width = params.getInt("PathEdgeWidth");
   scene.path_width = params.getInt("PathWidth") / 10.0f * (scene.is_metric ? 1.0f : FOOT_TO_METER) / 2.0f;
@@ -372,17 +369,7 @@ void ui_update_frogpilot_params(UIState *s) {
   scene.personalities_via_screen = params.getBool("PersonalitiesViaScreen") && params.getBool("AdjustablePersonalities");
   scene.random_events = params.getBool("RandomEvents");
   scene.rotating_wheel = params.getBool("RotatingWheel");
-
-  bool screen_management = params.getBool("ScreenManagement");
-  bool hide_ui_elements = screen_management && params.getBool("HideUIElements");
-  scene.hide_alerts = hide_ui_elements && params.getBool("HideAlerts");
-  scene.hide_map_icon = hide_ui_elements && params.getBool("HideMapIcon");
-  scene.hide_max_speed = hide_ui_elements && params.getBool("HideMaxSpeed");
-  scene.screen_brightness = screen_management ? params.getInt("ScreenBrightness") : 101;
-  scene.screen_brightness_onroad = screen_management ? params.getInt("ScreenBrightnessOnroad") : 101;
-  scene.screen_recorder = screen_management && params.getBool("ScreenRecorder");
-  scene.screen_timeout = screen_management ? params.getInt("ScreenTimeout") : 30;
-  scene.screen_timeout_onroad = screen_management ? params.getInt("ScreenTimeoutOnroad") : 10;
+  scene.screen_brightness = params.getInt("ScreenBrightness");
 
   scene.speed_limit_controller = params.getBool("SpeedLimitController");
   scene.show_slc_offset = scene.speed_limit_controller && params.getBool("ShowSLCOffset");
@@ -505,11 +492,9 @@ void Device::setAwake(bool on) {
   }
 }
 
-void Device::resetInteractiveTimeout(int timeout, int timeout_onroad) {
+void Device::resetInteractiveTimeout(int timeout) {
   if (timeout == -1) {
     timeout = 30;
-  } else {
-    timeout = (ignition_on ? timeout_onroad : timeout);
   }
   interactive_timeout = timeout * UI_FREQ;
 }
@@ -533,10 +518,8 @@ void Device::updateBrightness(const UIState &s) {
   int brightness = brightness_filter.update(clipped_brightness);
   if (!awake) {
     brightness = 0;
-  } else if (s.scene.started && s.scene.screen_brightness_onroad != 101) {
+  } else if (s.scene.screen_brightness <= 100) {
     // Bring the screen brightness up to 5% upon screen tap
-    brightness = interactive_timeout > 0 ? fmax(5, s.scene.screen_brightness_onroad) : s.scene.screen_brightness_onroad;
-  } else if (s.scene.screen_brightness != 101) {
     brightness = fmax(5, s.scene.screen_brightness);
   }
 
@@ -549,21 +532,16 @@ void Device::updateBrightness(const UIState &s) {
 }
 
 void Device::updateWakefulness(const UIState &s) {
-  bool ignition_state_changed = s.scene.ignition != ignition_on;
+  bool ignition_just_turned_off = !s.scene.ignition && ignition_on;
   ignition_on = s.scene.ignition;
 
-  if (ignition_state_changed) {
-    // Instantly turn off the screen if the onroad brightness is set to 0%
-    if (ignition_on && s.scene.screen_brightness_onroad == 0) {
-      resetInteractiveTimeout(0, 0);
-    } else {
-      resetInteractiveTimeout(s.scene.screen_timeout, s.scene.screen_timeout_onroad);
-    }
+  if (ignition_just_turned_off) {
+    resetInteractiveTimeout();
   } else if (interactive_timeout > 0 && --interactive_timeout == 0) {
     emit interactiveTimeout();
   }
 
-  if (s.scene.screen_brightness_onroad != 0) {
+  if (s.scene.screen_brightness != 0) {
     setAwake(s.scene.ignition || interactive_timeout > 0);
   } else {
     setAwake(interactive_timeout > 0);

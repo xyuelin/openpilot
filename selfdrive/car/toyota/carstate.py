@@ -10,7 +10,6 @@ from opendbc.can.parser import CANParser
 from openpilot.selfdrive.car.interfaces import CarStateBase
 from openpilot.selfdrive.car.toyota.values import ToyotaFlags, CAR, DBC, STEER_THRESHOLD, NO_STOP_TIMER_CAR, \
                                                   TSS2_CAR, RADAR_ACC_CAR, EPS_SCALE, UNSUPPORTED_DSU_CAR
-from openpilot.selfdrive.controls.lib.drive_helpers import CRUISE_LONG_PRESS
 
 from openpilot.selfdrive.frogpilot.functions.speed_limit_controller import SpeedLimitController
 
@@ -189,45 +188,7 @@ class CarState(CarStateBase):
     if not self.CP.openpilotLongitudinalControl and self.CP.carFingerprint not in (TSS2_CAR, UNSUPPORTED_DSU_CAR):
       self.stock_resume_ready = cp.vl["ACC_CONTROL"]["RELEASE_STANDSTILL"] == 1
 
-    # FrogPilot functions
-    if self.CP.flags & ToyotaFlags.SMART_DSU:
-      distance_pressed = cp.vl["SDSU"]["FD_BUTTON"] == 1
-    elif self.CP.openpilotLongitudinalControl:
-      # KRKeegan - Add support for toyota distance button
-      distance_pressed = cp_acc.vl["ACC_CONTROL"]["DISTANCE"] == 1
-
-    # Experimental Mode via double clicking the LKAS button function
-    if frogpilot_variables.experimental_mode_via_lkas and ret.cruiseState.available and self.CP.carFingerprint != CAR.PRIUS_V:
-      message_keys = ["LDA_ON_MESSAGE", "SET_ME_X02"]
-      lkas_pressed = any(self.lkas_hud.get(key) == 1 for key in message_keys)
-
-      if lkas_pressed and not self.lkas_previously_pressed:
-        if frogpilot_variables.conditional_experimental_mode:
-          self.fpf.update_cestatus()
-        else:
-          self.fpf.update_experimental_mode()
-
-      self.lkas_previously_pressed = lkas_pressed
-
-    # Experimental Mode via long pressing the distance button function
-    if ret.cruiseState.available:
-      if distance_pressed and frogpilot_variables.experimental_mode_via_distance:
-        self.distance_pressed_counter += 1
-      elif self.distance_previously_pressed:
-        if self.distance_pressed_counter < CRUISE_LONG_PRESS:
-          self.previous_personality_profile = (self.personality_profile + 2) % 3
-          self.profile_restored = False
-        self.distance_pressed_counter = 0
-
-      if self.distance_pressed_counter == CRUISE_LONG_PRESS:
-        if frogpilot_variables.conditional_experimental_mode:
-          self.fpf.update_cestatus()
-        else:
-          self.fpf.update_experimental_mode()
-
-      self.distance_previously_pressed = distance_pressed
-
-    # Personality Profiles via steering wheel functions
+    # Driving personalities function
     if frogpilot_variables.personalities_via_wheel and ret.cruiseState.available:
       # Need to subtract by 1 to comply with the personality profiles of "0", "1", and "2"
       self.personality_profile = cp.vl["PCM_CRUISE_SM"]["DISTANCE_LINES"] - 1
@@ -244,10 +205,25 @@ class CarState(CarStateBase):
       if not self.profile_restored:
         self.distance_button = not self.distance_button
 
-      elif self.profile_restored:
+      if self.profile_restored:
+        if self.CP.flags & ToyotaFlags.SMART_DSU:
+          self.distance_button = cp.vl["SDSU"]["FD_BUTTON"]
+        elif self.CP.carFingerprint not in RADAR_ACC_CAR:
+          # KRKeegan - Add support for toyota distance button
+          self.distance_button = cp_acc.vl["ACC_CONTROL"]["DISTANCE"]
+
         if self.personality_profile != self.previous_personality_profile and self.personality_profile >= 0:
           self.fpf.distance_button_function(self.personality_profile)
           self.previous_personality_profile = self.personality_profile
+
+    # Toggle Experimental Mode from steering wheel function
+    if frogpilot_variables.experimental_mode_via_lkas and ret.cruiseState.available and self.CP.carFingerprint != CAR.PRIUS_V:
+      message_keys = ["LDA_ON_MESSAGE", "SET_ME_X02"]
+      lkas_pressed = any(self.lkas_hud.get(key) == 1 for key in message_keys)
+
+      if lkas_pressed and not self.lkas_previously_pressed:
+        self.fpf.lkas_button_function(frogpilot_variables.conditional_experimental_mode)
+      self.lkas_previously_pressed = lkas_pressed
 
     # Traffic signals for Speed Limit Controller - Credit goes to the DragonPilot team!
     self.update_traffic_signals(cp_cam)

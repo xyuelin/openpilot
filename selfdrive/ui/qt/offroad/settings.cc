@@ -20,7 +20,6 @@
 #include "selfdrive/ui/qt/widgets/scrollview.h"
 #include "selfdrive/ui/qt/widgets/ssh_keys.h"
 #include "selfdrive/ui/qt/widgets/toggle.h"
-#include "selfdrive/ui/ui.h"
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/qt/qt_window.h"
 
@@ -302,15 +301,9 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
     process.setWorkingDirectory("/data/openpilot/panda");
     process.start("/bin/sh", QStringList{"-c", "pkill -f boardd; PYTHONPATH=.. python -c \"from panda import Panda; Panda().flash()\""});
     process.waitForFinished();
-    Hardware::soft_reboot();
+    Hardware::reboot();
   });
   addItem(flashPandaBtn);
-
-  auto lockDoorsButton = new ButtonControl(tr("Lock Doors"), tr("LOCK"), "Use this button to lock the doors on Toyota/Lexus vehicles.");
-  connect(lockDoorsButton, &ButtonControl::clicked, []() {
-    system("python ../../../../frogpilot/functions/lock_doors.py --lock");
-  });
-  addItem(lockDoorsButton);
 
   QObject::connect(uiState(), &UIState::offroadTransition, [=](bool offroad) {
     for (auto btn : findChildren<ButtonControl *>()) {
