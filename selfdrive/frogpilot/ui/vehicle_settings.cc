@@ -171,12 +171,12 @@ FrogPilotVehiclesPanel::FrogPilotVehiclesPanel(SettingsWindow *parent) : FrogPil
     }
   });
 
+  QObject::connect(uiState(), &UIState::uiUpdate, this, &FrogPilotVehiclesPanel::updateState);
+
   carMake = QString::fromStdString(params.get("CarMake"));
   if (!carMake.isEmpty()) {
     setModels();
   }
-
-  QObject::connect(uiState(), &UIState::uiUpdate, this, &FrogPilotVehiclesPanel::updateState);
 }
 
 void FrogPilotVehiclesPanel::updateState(const UIState &s) {

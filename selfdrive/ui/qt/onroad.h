@@ -2,6 +2,8 @@
 
 #include <memory>
 
+#include <QMovie>
+#include <QLabel>
 #include <QPushButton>
 #include <QStackedLayout>
 #include <QWidget>
@@ -78,12 +80,19 @@ private:
   // FrogPilot variables
   UIScene &scene;
 
-  std::map<int, QPixmap> wheelImages;
+  QMap<int, QPixmap> wheelImages;
+  QMap<int, QMovie*> wheelImagesGif;
+
+  QMovie engage_gif;
+  QLabel *gifLabel;
 
   bool firefoxRandomEventTriggered;
   bool rotatingWheel;
+  bool weebRandomEventTriggered;
+
   int steeringAngleDeg;
   int wheelIcon;
+  int wheelIconGif;
   int y_offset;
 };
 
@@ -232,10 +241,12 @@ private:
   float slcSpeedLimitOffset;
   float speedConversion;
 
+  int availableImages;
   int cameraView;
   int conditionalSpeed;
   int conditionalSpeedLead;
   int conditionalStatus;
+  int currentHolidayTheme;
   int customColors;
   int customSignals;
   int obstacleDistance;
@@ -244,9 +255,12 @@ private:
 
   QString leadDistanceUnit;
   QString leadSpeedUnit;
+  QString themePath;
+  QStringList imagePaths;
 
   size_t animationFrameIndex;
 
+  std::unordered_map<int, std::tuple<QString, int, QColor, std::map<double, QBrush>>> holidayThemeConfiguration;
   std::unordered_map<int, std::tuple<QString, int, QColor, std::map<double, QBrush>>> themeConfiguration;
   std::vector<QPixmap> signalImgVector;
 

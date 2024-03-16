@@ -60,11 +60,13 @@ signals:
 private slots:
   void poweroff();
   void reboot();
-  void softreboot();
   void updateCalibDescription();
 
 private:
   Params params;
+
+  // FrogPilot variables
+  Params paramsMemory{"/dev/shm/params"};
 };
 
 class TogglesPanel : public ListWidget {
