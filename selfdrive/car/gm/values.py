@@ -121,6 +121,7 @@ class CAR(StrEnum):
   CT6_CC = "CADILLAC CT6 NO ACC"
   TRAILBLAZER_CC = "CHEVROLET TRAILBLAZER 2024 NO ACC"
   XT4 = "CADILLAC XT4 2023"
+  BABYENCLAVE = "BUICK BABY ENCLAVE 2020"
   TRAX = "CHEVROLET TRAX 2024"
 
 
@@ -174,6 +175,7 @@ CAR_INFO: Dict[str, Union[GMCarInfo, List[GMCarInfo]]] = {
   CAR.CT6_CC: GMCarInfo("Cadillac CT6 No ACC"),
   CAR.TRAILBLAZER_CC: GMCarInfo("Chevrolet Trailblazer 2024 No ACC"),
   CAR.XT4: GMCarInfo("Cadillac XT4 2023", "Driver Assist Package"),
+  CAR.BABYENCLAVE: GMCarInfo("Buick Baby Enclave 2020-23"),
   CAR.TRAX: GMCarInfo("Chevrolet TRAX 2024"),
 }
 
@@ -251,7 +253,7 @@ EV_CAR = {CAR.VOLT, CAR.BOLT_EUV, CAR.VOLT_CC, CAR.BOLT_CC}
 CC_ONLY_CAR = {CAR.VOLT_CC, CAR.BOLT_CC, CAR.EQUINOX_CC, CAR.SUBURBAN_CC, CAR.YUKON_CC, CAR.CT6_CC, CAR.TRAILBLAZER_CC}
 
 # We're integrated at the Safety Data Gateway Module on these cars
-SDGM_CAR = {CAR.XT4}
+SDGM_CAR = {CAR.XT4, CAR.BABYENCLAVE}
 
 # Slow acceleration cars
 SLOW_ACC = {CAR.SILVERADO}
