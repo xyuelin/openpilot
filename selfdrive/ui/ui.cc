@@ -227,6 +227,7 @@ static void update_state(UIState *s) {
     scene.blind_spot_left = carState.getLeftBlindspot();
     scene.blind_spot_right = carState.getRightBlindspot();
     scene.reverse = carState.getGearShifter() == cereal::CarState::GearShifter::REVERSE;
+    scene.standstill = carState.getStandstill();
     scene.turn_signal_left = carState.getLeftBlinker();
     scene.turn_signal_right = carState.getRightBlinker();
   }
@@ -303,6 +304,7 @@ void ui_update_frogpilot_params(UIState *s) {
   scene.fps_counter = custom_onroad_ui && params.getBool("FPSCounter");
   scene.lead_info = scene.longitudinal_control && custom_onroad_ui && params.getBool("LeadInfo");
   scene.use_si = scene.lead_info && params.getBool("UseSI");
+  scene.pedals_on_ui = custom_onroad_ui && params.getBool("PedalsOnUI");
   scene.road_name_ui = custom_onroad_ui && params.getBool("RoadNameUI");
 
   bool custom_theme = params.getBool("CustomTheme");
