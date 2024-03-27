@@ -115,6 +115,7 @@ FrogPilotControlsPanel::FrogPilotControlsPanel(SettingsWindow *parent) : FrogPil
     {"PauseLateralSpeed", tr("Pause Lateral Below"), tr("Pause lateral control on all speeds below the set speed."), ""},
     {"PauseLateralOnSignal", tr("Pause Lateral On Turn Signal Below"), tr("Pause lateral control when using a turn signal below the set speed."), ""},
     {"ReverseCruise", tr("Reverse Cruise Increase"), tr("Reverses the 'long press' functionality logic to increase the max set speed by 5 instead of 1. Useful to increase the max speed quickly."), ""},
+    {"SetSpeedOffset", tr("Set Speed Offset"), tr("Set an offset for your desired set speed."), ""},
   };
 
   for (const auto &[param, title, desc, icon] : controlToggles) {
@@ -507,6 +508,7 @@ FrogPilotControlsPanel::FrogPilotControlsPanel(SettingsWindow *parent) : FrogPil
             modifiedQolKeys.erase("ReverseCruise");
           } else {
             modifiedQolKeys.erase("CustomCruise");
+            modifiedQolKeys.erase("SetSpeedOffset");
           }
 
           toggle->setVisible(modifiedQolKeys.find(key.c_str()) != modifiedQolKeys.end());
@@ -527,6 +529,8 @@ FrogPilotControlsPanel::FrogPilotControlsPanel(SettingsWindow *parent) : FrogPil
       std::vector<QString> reverseCruiseToggles{"ReverseCruiseUI"};
       std::vector<QString> reverseCruiseNames{tr("Control Via UI")};
       toggle = new FrogPilotParamToggleControl(param, title, desc, icon, reverseCruiseToggles, reverseCruiseNames);
+    } else if (param == "SetSpeedOffset") {
+      toggle = new FrogPilotParamValueControl(param, title, desc, icon, 0, 99, std::map<int, QString>(), this, false, tr(" mph"));
 
     } else if (param == "NudgelessLaneChange") {
       FrogPilotParamManageControl *laneChangeToggle = new FrogPilotParamManageControl(param, title, desc, icon, this);
@@ -683,6 +687,7 @@ void FrogPilotControlsPanel::updateMetric() {
     params.putIntNonBlocking("LaneDetectionWidth", std::nearbyint(params.getInt("LaneDetectionWidth") * distanceConversion));
     params.putIntNonBlocking("PauseLateralSpeed", std::nearbyint(params.getInt("PauseLateralSpeed") * speedConversion));
     params.putIntNonBlocking("PauseLateralOnSignal", std::nearbyint(params.getInt("PauseLateralOnSignal") * speedConversion));
+    params.putIntNonBlocking("SetSpeedOffset", std::nearbyint(params.getInt("SetSpeedOffset") * speedConversion));
     params.putIntNonBlocking("StoppingDistance", std::nearbyint(params.getInt("StoppingDistance") * distanceConversion));
   }
 
@@ -690,6 +695,7 @@ void FrogPilotControlsPanel::updateMetric() {
   FrogPilotParamValueControl *laneWidthToggle = static_cast<FrogPilotParamValueControl*>(toggles["LaneDetectionWidth"]);
   FrogPilotParamValueControl *pauseLateralToggle = static_cast<FrogPilotParamValueControl*>(toggles["PauseLateralOnSignal"]);
   FrogPilotParamValueControl *pauseLateralSpeedToggle = static_cast<FrogPilotParamValueControl*>(toggles["PauseLateralSpeed"]);
+  FrogPilotParamValueControl *setSpeedOffsetToggle = static_cast<FrogPilotParamValueControl*>(toggles["SetSpeedOffset"]);
   FrogPilotParamValueControl *stoppingDistanceToggle = static_cast<FrogPilotParamValueControl*>(toggles["StoppingDistance"]);
 
   if (isMetric) {
@@ -699,6 +705,7 @@ void FrogPilotControlsPanel::updateMetric() {
 
     pauseLateralToggle->updateControl(0, 99, tr(" kph"));
     pauseLateralSpeedToggle->updateControl(0, 99, tr(" kph"));
+    setSpeedOffsetToggle->updateControl(0, 150, tr(" kph"));
 
     stoppingDistanceToggle->updateControl(0, 5, tr(" meters"));
   } else {
@@ -708,6 +715,7 @@ void FrogPilotControlsPanel::updateMetric() {
 
     pauseLateralToggle->updateControl(0, 99, tr(" mph"));
     pauseLateralSpeedToggle->updateControl(0, 99, tr(" mph"));
+    setSpeedOffsetToggle->updateControl(0, 99, tr(" mph"));
 
     stoppingDistanceToggle->updateControl(0, 10, tr(" feet"));
   }
@@ -716,6 +724,7 @@ void FrogPilotControlsPanel::updateMetric() {
   laneWidthToggle->refresh();
   pauseLateralToggle->refresh();
   pauseLateralSpeedToggle->refresh();
+  setSpeedOffsetToggle->refresh();
   stoppingDistanceToggle->refresh();
 }
 
