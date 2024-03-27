@@ -106,6 +106,7 @@ FrogPilotControlsPanel::FrogPilotControlsPanel(SettingsWindow *parent) : FrogPil
     {"OnroadDistanceButton", tr("Onroad Distance Button"), tr("Simulate a distance button via the onroad UI to control personalities, 'Experimental Mode', and 'Traffic Mode'."), ""},
     {"PauseLateralSpeed", tr("Pause Lateral Below"), tr("Pause lateral control on all speeds below the set speed."), ""},
     {"ReverseCruise", tr("Reverse Cruise Increase"), tr("Reverses the 'long press' functionality logic to increase the max set speed by 5 instead of 1. Useful to increase the max speed quickly."), ""},
+    {"SetSpeedOffset", tr("Set Speed Offset"), tr("Set an offset for your desired set speed."), ""},
   };
 
   for (const auto &[param, title, desc, icon] : controlToggles) {
@@ -520,6 +521,7 @@ FrogPilotControlsPanel::FrogPilotControlsPanel(SettingsWindow *parent) : FrogPil
           } else {
             modifiedQolKeys.erase("CustomCruise");
             modifiedQolKeys.erase("CustomCruiseLong");
+            modifiedQolKeys.erase("SetSpeedOffset");
           }
 
           toggle->setVisible(modifiedQolKeys.find(key.c_str()) != modifiedQolKeys.end());
@@ -544,6 +546,8 @@ FrogPilotControlsPanel::FrogPilotControlsPanel(SettingsWindow *parent) : FrogPil
       std::vector<QString> reverseCruiseToggles{"ReverseCruiseUI"};
       std::vector<QString> reverseCruiseNames{tr("Control Via UI")};
       toggle = new FrogPilotParamToggleControl(param, title, desc, icon, reverseCruiseToggles, reverseCruiseNames);
+    } else if (param == "SetSpeedOffset") {
+      toggle = new FrogPilotParamValueControl(param, title, desc, icon, 0, 99, std::map<int, QString>(), this, false, tr(" mph"));
 
     } else if (param == "NudgelessLaneChange") {
       FrogPilotParamManageControl *laneChangeToggle = new FrogPilotParamManageControl(param, title, desc, icon, this);
@@ -711,6 +715,7 @@ void FrogPilotControlsPanel::updateMetric() {
     params.putIntNonBlocking("PauseAOLOnBrake", std::nearbyint(params.getInt("PauseAOLOnBrake") * speedConversion));
     params.putIntNonBlocking("PauseLateralOnSignal", std::nearbyint(params.getInt("PauseLateralOnSignal") * speedConversion));
     params.putIntNonBlocking("PauseLateralSpeed", std::nearbyint(params.getInt("PauseLateralSpeed") * speedConversion));
+    params.putIntNonBlocking("SetSpeedOffset", std::nearbyint(params.getInt("SetSpeedOffset") * speedConversion));
     params.putIntNonBlocking("StoppingDistance", std::nearbyint(params.getInt("StoppingDistance") * distanceConversion));
   }
 
@@ -719,6 +724,7 @@ void FrogPilotControlsPanel::updateMetric() {
   FrogPilotParamValueControl *laneWidthToggle = static_cast<FrogPilotParamValueControl*>(toggles["LaneDetectionWidth"]);
   FrogPilotParamValueControl *pauseAOLOnBrakeToggle = static_cast<FrogPilotParamValueControl*>(toggles["PauseAOLOnBrake"]);
   FrogPilotParamValueControl *pauseLateralToggle = static_cast<FrogPilotParamValueControl*>(toggles["PauseLateralSpeed"]);
+  FrogPilotParamValueControl *setSpeedOffsetToggle = static_cast<FrogPilotParamValueControl*>(toggles["SetSpeedOffset"]);
   FrogPilotParamValueControl *stoppingDistanceToggle = static_cast<FrogPilotParamValueControl*>(toggles["StoppingDistance"]);
 
   if (isMetric) {
@@ -727,6 +733,7 @@ void FrogPilotControlsPanel::updateMetric() {
     laneWidthToggle->updateControl(0, 30, tr(" meters"), 10);
     pauseAOLOnBrakeToggle->updateControl(0, 99, tr(" kph"));
     pauseLateralToggle->updateControl(0, 99, tr(" kph"));
+    setSpeedOffsetToggle->updateControl(0, 150, tr(" kph"));
     stoppingDistanceToggle->updateControl(0, 5, tr(" meters"));
   } else {
     customCruiseToggle->updateControl(1, 99, tr(" mph"));
@@ -734,6 +741,7 @@ void FrogPilotControlsPanel::updateMetric() {
     laneWidthToggle->updateControl(0, 100, tr(" feet"), 10);
     pauseAOLOnBrakeToggle->updateControl(0, 99, tr(" mph"));
     pauseLateralToggle->updateControl(0, 99, tr(" mph"));
+    setSpeedOffsetToggle->updateControl(0, 99, tr(" mph"));
     stoppingDistanceToggle->updateControl(0, 10, tr(" feet"));
   }
 
@@ -742,6 +750,7 @@ void FrogPilotControlsPanel::updateMetric() {
   laneWidthToggle->refresh();
   pauseAOLOnBrakeToggle->refresh();
   pauseLateralToggle->refresh();
+  setSpeedOffsetToggle->refresh();
   stoppingDistanceToggle->refresh();
 }
 
