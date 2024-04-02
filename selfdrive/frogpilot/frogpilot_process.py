@@ -15,6 +15,7 @@ from openpilot.system.hardware import HARDWARE
 
 from openpilot.selfdrive.frogpilot.controls.frogpilot_plannerd import FrogPilotPlannerd
 from openpilot.selfdrive.frogpilot.controls.lib.frogpilot_functions import FrogPilotFunctions
+from openpilot.selfdrive.frogpilot.controls.lib.theme_manager import ThemeManager
 
 def automatic_update_check(params):
   update_available = params.get_bool("UpdaterFetchAvailable")
@@ -42,6 +43,7 @@ def frogpilot_thread():
   params_memory = Params("/dev/shm/params")
 
   frogpilot_functions = FrogPilotFunctions()
+  theme_manager = ThemeManager()
 
   CP = None
 
@@ -95,6 +97,7 @@ def frogpilot_thread():
       if check_update and automatic_updates:
         automatic_update_check(params)
 
+      theme_manager.update_holiday()
       first_run = False
 
     time.sleep(DT_MDL)
