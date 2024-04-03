@@ -20,6 +20,9 @@ A_CRUISE_MIN = -1.2
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
 
+ACCEL_MAX_PLUS = [ACCEL_MAX, 4.0]
+ACCEL_MAX_PLUS_BP = [0., 10.0]
+
 # Lookup table for turns
 _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
@@ -92,17 +95,18 @@ class LongitudinalPlanner:
     # No change cost when user is controlling the speed, or when standstill
     prev_accel_constraint = not (reset_state or sm['carState'].standstill)
 
+    accel_limits = [sm['frogpilotPlan'].minAcceleration, sm['frogpilotPlan'].maxAcceleration]
     if self.mpc.mode == 'acc':
-      accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
       accel_limits_turns = limit_accel_in_turns(v_ego, sm['carState'].steeringAngleDeg, accel_limits, self.CP)
     else:
-      accel_limits = [ACCEL_MIN, ACCEL_MAX]
       accel_limits_turns = [ACCEL_MIN, ACCEL_MAX]
 
     if reset_state:
       self.v_desired_filter.x = v_ego
+      # Slowly ramp up the acceleration to prevent jerky behaviors from a standstill
+      max_acceleration = min(interp(v_ego, ACCEL_MAX_PLUS_BP, ACCEL_MAX_PLUS), accel_limits[1])
       # Clip aEgo to cruise limits to prevent large accelerations when becoming active
-      self.a_desired = clip(sm['carState'].aEgo, accel_limits[0], accel_limits[1])
+      self.a_desired = clip(sm['carState'].aEgo, accel_limits[0], max_acceleration)
 
     # Prevent divergence, smooth in current v_ego
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
