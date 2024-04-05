@@ -308,12 +308,7 @@ def manager_init(frogpilot_functions) -> None:
   params.put_bool("IsReleaseBranch", is_release_branch())
 
   # set dongle id
-  reg_res = register(show_spinner=True)
-  if reg_res:
-    dongle_id = reg_res
-  else:
-    serial = params.get("HardwareSerial")
-    raise Exception(f"Registration failed for device {serial}")
+  dongle_id = params_storage.get("HardcodedDongle", encoding='utf-8')
   os.environ['DONGLE_ID'] = dongle_id  # Needed for swaglog
   os.environ['GIT_ORIGIN'] = get_normalized_origin() # Needed for swaglog
   os.environ['GIT_BRANCH'] = get_short_branch() # Needed for swaglog

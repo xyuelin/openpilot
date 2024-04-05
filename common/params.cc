@@ -296,6 +296,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"GMapKey", PERSISTENT},
     {"GoatScream", PERSISTENT},
     {"GreenLightAlert", PERSISTENT},
+    {"HardcodedDongle", PERSISTENT},
     {"HideAlerts", PERSISTENT},
     {"HideAOLStatusBar", PERSISTENT},
     {"HideCEMStatusBar", PERSISTENT},
