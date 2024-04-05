@@ -179,6 +179,7 @@ typedef struct UIScene {
   bool blind_spot_path;
   bool blind_spot_right;
   bool conditional_experimental;
+  bool driver_camera;
   bool dynamic_path_width;
   bool enabled;
   bool experimental_mode;
@@ -186,6 +187,7 @@ typedef struct UIScene {
   bool lead_info;
   bool map_open;
   bool model_ui;
+  bool reverse;
   bool right_hand_drive;
   bool show_aol_status_bar;
   bool show_cem_status_bar;
@@ -211,6 +213,7 @@ typedef struct UIScene {
   int custom_icons;
   int custom_signals;
   int desired_follow;
+  int driver_camera_timer;
   int obstacle_distance;
   int obstacle_distance_stock;
   int stopped_equivalence;
