@@ -182,6 +182,8 @@ class Controls:
     self.always_on_lateral_main = self.always_on_lateral and self.params.get_bool("AlwaysOnLateralMain")
     self.always_on_lateral_pause = self.always_on_lateral and self.params.get_bool("PauseAOLOnBrake")
 
+    self.stopped_for_light_previously = False
+
     self.update_frogpilot_params()
 
   def set_initial_state(self):
@@ -883,6 +885,20 @@ class Controls:
       t.join()
 
   def update_frogpilot_events(self, CS):
+    if self.green_light_alert:
+      stopped_for_light = self.sm['frogpilotPlan'].redLight and CS.standstill
+
+      if self.sm.frame % 50 == 0:
+        green_light = not stopped_for_light and self.stopped_for_light_previously
+
+        green_light &= not CS.gasPressed
+        green_light &= not self.sm['longitudinalPlan'].hasLead
+        green_light &= self.driving_gear
+
+        if green_light:
+          self.events.add(EventName.greenLight)
+
+      self.stopped_for_light_previously = stopped_for_light
 
   def update_frogpilot_variables(self, CS):
     self.driving_gear = CS.gearShifter not in (GearShifter.neutral, GearShifter.park, GearShifter.reverse, GearShifter.unknown)
@@ -919,6 +935,7 @@ class Controls:
     self.frogpilot_variables.conditional_experimental_mode = self.params.get_bool("ConditionalExperimental")
 
     custom_alerts = self.params.get_bool("CustomAlerts")
+    self.green_light_alert = custom_alerts and self.params.get_bool("GreenLightAlert")
 
     custom_theme = self.params.get_bool("CustomTheme")
     custom_sounds = self.params.get_int("CustomSounds") if custom_theme else 0
