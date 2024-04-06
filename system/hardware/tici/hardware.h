@@ -50,6 +50,11 @@ public:
   }
 
   static void reboot() { std::system("sudo reboot"); }
+  static void soft_reboot() {
+    std::system("tmux kill-session -t comma"); 
+    std::system("rm -f /tmp/safe_staging_overlay.lock");
+    std::system("tmux new -s comma -d '/data/continue.sh'");
+  }
   static void poweroff() { std::system("sudo poweroff"); }
   static void set_brightness(int percent) {
     std::string max = util::read_file("/sys/class/backlight/panel0-backlight/max_brightness");
