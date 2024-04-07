@@ -135,9 +135,9 @@ class Tici(HardwareBase):
     subprocess.check_output(["sudo", "reboot"])
 
   def soft_reboot(self):
-    subprocess.run(["tmux kill-session -t comma"], shell=True)
-    subprocess.run(["rm -f /tmp/safe_staging_overlay.lock"], shell=True)
-    subprocess.run(["tmux new -s comma -d '/data/continue.sh'"], shell=True)
+    subprocess.check_output(['tmux', 'kill-session', '-t', 'comma'])
+    subprocess.check_output(['rm', '-f', '/tmp/safe_staging_overlay.lock'])
+    subprocess.check_output(['tmux', 'new', '-s', 'comma', '-d', '/data/continue.sh'])
 
   def uninstall(self):
     Path("/data/__system_reset__").touch()
