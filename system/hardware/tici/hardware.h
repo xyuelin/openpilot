@@ -51,9 +51,16 @@ public:
 
   static void reboot() { std::system("sudo reboot"); }
   static void soft_reboot() {
-    std::system("tmux kill-session -t comma"); 
-    std::system("rm -f /tmp/safe_staging_overlay.lock");
-    std::system("tmux new -s comma -d '/data/continue.sh'");
+    int system_result;
+    do {
+      system_result = std::system("tmux kill-session -t comma");
+    } while (system_result != 0);
+    do {
+      system_result = std::system("rm -f /tmp/safe_staging_overlay.lock");
+    } while (system_result != 0);
+    do {
+      system_result = std::system("tmux new -s comma -d '/data/continue.sh'");
+    } while (system_result != 0);
   }
   static void poweroff() { std::system("sudo poweroff"); }
   static void set_brightness(int percent) {
