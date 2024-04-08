@@ -25,6 +25,10 @@ private:
   void updateState(const UIState &s);
   void updateToggles();
 
+  ButtonControl *deleteModelBtn;
+  ButtonControl *downloadModelBtn;
+  ButtonControl *selectModelBtn;
+
   FrogPilotDualParamControl *aggressiveProfile;
   FrogPilotDualParamControl *conditionalSpeedsImperial;
   FrogPilotDualParamControl *conditionalSpeedsMetric;
@@ -54,5 +58,6 @@ private:
   bool hasOpenpilotLongitudinal;
   bool hasPCMCruise;
   bool isMetric;
+  bool online;
   bool started;
 };

@@ -15,6 +15,7 @@ from openpilot.system.hardware import HARDWARE
 
 from openpilot.selfdrive.frogpilot.controls.frogpilot_plannerd import FrogPilotPlannerd
 from openpilot.selfdrive.frogpilot.controls.lib.frogpilot_functions import FrogPilotFunctions
+from openpilot.selfdrive.frogpilot.controls.lib.model_manager import DEFAULT_MODEL, DEFAULT_MODEL_NAME, download_model, populate_models
 from openpilot.selfdrive.frogpilot.controls.lib.theme_manager import ThemeManager
 
 def automatic_update_check(params):
@@ -74,8 +75,15 @@ def frogpilot_thread():
                                   sm['liveLocationKalman'], sm['modelV2'], sm['radarState'])
         frogpilot_plannerd.publish(sm, pm)
 
+    if params_memory.get("ModelToDownload", encoding='utf-8') is not None:
+      download_model()
+
     if params_memory.get_bool("FrogPilotTogglesUpdated"):
       automatic_updates = params.get_bool("AutomaticUpdates")
+
+      if not params.get_bool("ModelSelector"):
+        params.put("Model", DEFAULT_MODEL)
+        params.put("ModelName", DEFAULT_MODEL_NAME)
 
       if started:
         frogpilot_plannerd.update_frogpilot_params()
@@ -89,6 +97,8 @@ def frogpilot_thread():
         continue
 
     if datetime.datetime.now().second == 0 or first_run or params_memory.get_bool("ManualUpdateInitiated"):
+      populate_models()
+
       screen_off = deviceState.screenBrightnessPercent == 0
       internet_connection = is_connected_to_internet()
 

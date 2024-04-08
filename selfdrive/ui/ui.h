@@ -195,6 +195,7 @@ typedef struct UIScene {
   bool lead_info;
   bool map_open;
   bool model_ui;
+  bool online;
   bool reverse;
   bool reverse_cruise;
   bool reverse_cruise_ui;
