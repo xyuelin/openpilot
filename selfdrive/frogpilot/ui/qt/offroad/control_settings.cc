@@ -39,6 +39,10 @@ FrogPilotControlsPanel::FrogPilotControlsPanel(SettingsWindow *parent) : FrogPil
     {"AggressiveAcceleration", tr("Increase Acceleration Behind Faster Lead"), tr("Increase aggressiveness when following a faster lead."), ""},
     {"StoppingDistance", tr("Increase Stop Distance Behind Lead"), tr("Increase the stopping distance for a more comfortable stop from lead vehicles."), ""},
 
+    {"MTSCEnabled", tr("Map Turn Speed Control"), tr("Slow down for anticipated curves detected by the downloaded maps."), "../frogpilot/assets/toggle_icons/icon_speed_map.png"},
+    {"DisableMTSCSmoothing", tr("Disable MTSC UI Smoothing"), tr("Disables the smoothing for the requested speed in the onroad UI to show exactly what speed MTSC is currently requesting."), ""},
+    {"MTSCAggressiveness", tr("Turn Speed Aggressiveness"), tr("Set turn speed aggressiveness. Higher values result in faster turns, lower values yield gentler turns.\n\nA change of +- 1% results in the speed being raised or lowered by about 1 mph."), ""},
+
     {"QOLControls", tr("Quality of Life"), tr("Miscellaneous quality of life changes to improve your overall openpilot experience."), "../frogpilot/assets/toggle_icons/quality_of_life.png"},
     {"CustomCruise", tr("Cruise Increase Interval"), tr("Set a custom interval to increase the max set speed by."), ""},
     {"DisableOnroadUploads", tr("Disable Onroad Uploads"), tr("Prevent uploads to comma connect unless you're offroad and connected to Wi-Fi."), ""},
@@ -213,6 +217,18 @@ FrogPilotControlsPanel::FrogPilotControlsPanel(SettingsWindow *parent) : FrogPil
       toggle = profileSelection;
     } else if (param == "StoppingDistance") {
       toggle = new FrogPilotParamValueControl(param, title, desc, icon, 0, 10, std::map<int, QString>(), this, false, tr(" feet"));
+
+    } else if (param == "MTSCEnabled") {
+      FrogPilotParamManageControl *mtscToggle = new FrogPilotParamManageControl(param, title, desc, icon, this);
+      QObject::connect(mtscToggle, &FrogPilotParamManageControl::manageButtonClicked, this, [this]() {
+        openParentToggle();
+        for (auto &[key, toggle] : toggles) {
+          toggle->setVisible(mtscKeys.find(key.c_str()) != mtscKeys.end());
+        }
+      });
+      toggle = mtscToggle;
+    } else if (param == "MTSCAggressiveness") {
+      toggle = new FrogPilotParamValueControl(param, title, desc, icon, 1, 200, std::map<int, QString>(), this, false, "%");
 
     } else if (param == "QOLControls") {
       FrogPilotParamManageControl *qolToggle = new FrogPilotParamManageControl(param, title, desc, icon, this);
@@ -396,7 +412,7 @@ void FrogPilotControlsPanel::hideToggles() {
   relaxedProfile->setVisible(false);
 
   std::set<QString> longitudinalKeys = {"ConditionalExperimental", "CustomPersonalities", "ExperimentalModeActivation",
-                                        "LongitudinalTune"};
+                                        "LongitudinalTune", "MTSCEnabled"};
 
   for (auto &[key, toggle] : toggles) {
     toggle->setVisible(false);
