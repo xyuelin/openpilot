@@ -1109,6 +1109,8 @@ class Controls:
     self.signal_check = not (CS.vEgo < self.pause_lateral_below_signal and (CS.leftBlinker or CS.rightBlinker) and not CS.standstill)
     self.speed_check = not (CS.vEgo < self.pause_lateral_below_speed and not CS.standstill)
 
+    self.FPCC.trafficModeActive = self.params_memory.get_bool("TrafficModeActive")
+
     fpcc_send = messaging.new_message('frogpilotCarControl')
     fpcc_send.valid = CS.canValid
     fpcc_send.frogpilotCarControl = self.FPCC
@@ -1144,6 +1146,7 @@ class Controls:
 
     longitudinal_tune = self.params.get_bool("LongitudinalTune")
     self.frogpilot_variables.sport_plus = longitudinal_tune and self.params.get_int("AccelerationProfile") == 3
+    self.frogpilot_variables.traffic_mode = longitudinal_tune and self.params.get_bool("TrafficMode")
 
     self.lane_detection = self.params.get_bool("NudgelessLaneChange") and self.params.get_bool("LaneDetection")
     self.lane_detection_width = self.params.get_int("LaneDetectionWidth") * (1 if self.is_metric else CV.FOOT_TO_METER) / 10 if self.lane_detection else 0
