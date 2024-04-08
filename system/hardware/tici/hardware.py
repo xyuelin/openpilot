@@ -140,12 +140,12 @@ class Tici(HardwareBase):
       ['rm', '-f', '/tmp/safe_staging_overlay.lock'],
       ['tmux', 'new', '-s', 'comma', '-d', '/data/continue.sh']
     ]
-    os.sync()
     for command in commands:
       try:
         subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-      except Exception:
+      except subprocess.CalledProcessError:
         self.reboot()
+        break
 
   def uninstall(self):
     Path("/data/__system_reset__").touch()
