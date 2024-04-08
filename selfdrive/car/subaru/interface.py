@@ -20,6 +20,10 @@ class CarInterface(CarInterfaceBase):
     ret.dashcamOnly = bool(ret.flags & (SubaruFlags.PREGLOBAL | SubaruFlags.LKAS_ANGLE | SubaruFlags.HYBRID))
     ret.autoResumeSng = False
 
+    ret.buttonEvents = [
+      *create_button_events(self.CS.lkas_enabled, self.CS.lkas_previously_enabled, {1: FrogPilotButtonType.lkas}),
+    ]
+
     # Detect infotainment message sent from the camera
     if not (ret.flags & SubaruFlags.PREGLOBAL) and 0x323 in fingerprint[2]:
       ret.flags |= SubaruFlags.SEND_INFOTAINMENT.value
