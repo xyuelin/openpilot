@@ -132,6 +132,16 @@ class Tici(HardwareBase):
   def reboot(self, reason=None):
     subprocess.check_output(["sudo", "reboot"])
 
+  def soft_reboot(self):
+    commands = [
+      ['rm', '-f', '/tmp/safe_staging_overlay.lock'],
+      ['tmux', 'new', '-s', 'commatmp', '-d', '/data/continue.sh'],
+      ['tmux', 'kill-session', '-t', 'comma'],
+      ['tmux', 'rename', 'comma'],
+    ]
+    for command in commands:
+      subprocess.run(command, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+
   def uninstall(self):
     Path("/data/__system_reset__").touch()
     os.sync()

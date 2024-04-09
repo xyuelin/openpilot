@@ -271,6 +271,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"DisableVTSCSmoothing", PERSISTENT},
     {"DisengageVolume", PERSISTENT},
     {"DistanceLongPressed", PERSISTENT},
+    {"DoSoftReboot", CLEAR_ON_MANAGER_START},    
     {"DragonPilotTune", PERSISTENT},
     {"DriverCamera", PERSISTENT},
     {"DynamicPathWidth", PERSISTENT},

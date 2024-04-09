@@ -34,6 +34,6 @@ def main():
   p.send_heartbeat()
   print('\n\n\nrelay ON again\nkthxbay\n')
 
-  HARDWARE.reboot()
+  HARDWARE.soft_reboot()
 
 main()

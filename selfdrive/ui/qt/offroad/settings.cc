@@ -321,7 +321,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
         process.start("/bin/sh", QStringList{"-c", "python reflash_internal_panda.py"});
         process.waitForFinished();
 
-        Hardware::reboot();
+        Hardware::soft_reboot();
       }).detach();
     }
   });
@@ -337,7 +337,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
       std::system("find /data/params -type f ! -name 'FrogPilotDrives' ! -name 'FrogPilotMinutes' ! -name 'FrogPilotKilometers' -exec rm {} +");
       std::system("find /persist/params -type f ! -name 'FrogPilotDrives' ! -name 'FrogPilotMinutes' ! -name 'FrogPilotKilometers' -exec rm {} +");
 
-      Hardware::reboot();
+      Hardware::soft_reboot();
     }).detach();
   });
   addItem(resetTogglesBtn);
@@ -424,7 +424,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
               std::this_thread::sleep_for(std::chrono::seconds(3));
               frogpilotBackup->setValue("");
             }
-            Hardware::reboot();
+            Hardware::soft_reboot();
           } else {
             std::cerr << "Restore failed with error code: " << result << std::endl;
           }
@@ -547,6 +547,11 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   power_layout->addWidget(reboot_btn);
   QObject::connect(reboot_btn, &QPushButton::clicked, this, &DevicePanel::reboot);
 
+  QPushButton *softreboot_btn = new QPushButton(tr("Soft Reboot"));
+  softreboot_btn->setObjectName("softreboot_btn");
+  power_layout->addWidget(softreboot_btn);
+  QObject::connect(softreboot_btn, &QPushButton::clicked, this, &DevicePanel::softreboot);
+
   QPushButton *poweroff_btn = new QPushButton(tr("Power Off"));
   poweroff_btn->setObjectName("poweroff_btn");
   power_layout->addWidget(poweroff_btn);
@@ -557,6 +562,8 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   }
 
   setStyleSheet(R"(
+    #softreboot_btn { height: 120px; border-radius: 15px; background-color: #e2e22c; }
+    #softreboot_btn:pressed { background-color: #ffe224; }
     #reboot_btn { height: 120px; border-radius: 15px; background-color: #393939; }
     #reboot_btn:pressed { background-color: #4a4a4a; }
     #poweroff_btn { height: 120px; border-radius: 15px; background-color: #E22C2C; }
@@ -599,6 +606,18 @@ void DevicePanel::reboot() {
     }
   } else {
     ConfirmationDialog::alert(tr("Disengage to Reboot"), this);
+  }
+}
+
+void DevicePanel::softreboot() {
+  if (!uiState()->engaged()) {
+    if (ConfirmationDialog::confirm(tr("Are you sure you want to soft reboot?"), tr("Soft Reboot"), this)) {
+      if (!uiState()->engaged()) {
+        params.putBool("DoSoftReboot", true);
+      }
+    }
+  } else {
+    ConfirmationDialog::alert(tr("Disengage to Soft Reboot"), this);
   }
 }
 
