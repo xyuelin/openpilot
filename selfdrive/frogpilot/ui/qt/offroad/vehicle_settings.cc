@@ -205,13 +205,26 @@ void FrogPilotVehiclesPanel::updateToggles() {
 }
 
 void FrogPilotVehiclesPanel::updateCarToggles() {
+  std::set<std::string> evCars = {
+    "CHEVROLET BOLT EUV 2022",
+    "CHEVROLET BOLT EV NO ACC",
+    "CHEVROLET VOLT NO ACC",
+    "CHEVROLET VOLT PREMIER 2017",
+  };
+
   auto carParams = params.get("CarParamsPersistent");
   if (!carParams.empty()) {
     AlignedBuffer aligned_buf;
     capnp::FlatArrayMessageReader cmsg(aligned_buf.align(carParams.data(), carParams.size()));
     cereal::CarParams::Reader CP = cmsg.getRoot<cereal::CarParams>();
 
+    auto carFingerprint = CP.getCarFingerprint();
+
     hasOpenpilotLongitudinal = CP.getOpenpilotLongitudinalControl();
+    hasSNG = CP.getMinEnableSpeed() <= 0;
+    isEVCar = evCars.count(carFingerprint) > 0;
+    isGMTruck = carFingerprint == "CHEVROLET SILVERADO 1500 2020";
+    isImpreza = carFingerprint == "SUBARU IMPREZA LIMITED 2019";
   } else {
     hasOpenpilotLongitudinal = false;
   }
@@ -234,13 +247,33 @@ void FrogPilotVehiclesPanel::hideToggles() {
   bool subaru = carMake == "Subaru";
   bool toyota = carMake == "Lexus" || carMake == "Toyota";
 
+  std::set<QString> evCarKeys = {"EVTable"};
+  std::set<QString> gmTruckKeys = {"GasRegenCmd"};
+  std::set<QString> imprezaKeys = {"CrosstrekTorque"};
   std::set<QString> longitudinalKeys = {"EVTable", "GasRegenCmd", "LongitudinalTune", "LongPitch", "SNGHack"};
+  std::set<QString> sngKeys = {"SNGHack"};
 
   for (auto &[key, toggle] : toggles) {
     if (toggle) {
       toggle->setVisible(false);
 
       if (!hasOpenpilotLongitudinal && longitudinalKeys.find(key.c_str()) != longitudinalKeys.end()) {
+        continue;
+      }
+
+      if (hasSNG && sngKeys.find(key.c_str()) != sngKeys.end()) {
+        continue;
+      }
+
+      if (!isEVCar && evCarKeys.find(key.c_str()) != evCarKeys.end()) {
+        continue;
+      }
+
+      if (!isGMTruck && gmTruckKeys.find(key.c_str()) != gmTruckKeys.end()) {
+        continue;
+      }
+
+      if (!isImpreza && imprezaKeys.find(key.c_str()) != imprezaKeys.end()) {
         continue;
       }
 

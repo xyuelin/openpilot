@@ -982,7 +982,10 @@ void FrogPilotControlsPanel::hideToggles() {
   for (auto &[key, toggle] : toggles) {
     toggle->setVisible(false);
 
-    bool longitudinalToggles = longitudinalKeys.find(key.c_str()) != longitudinalKeys.end();
+    if (!hasOpenpilotLongitudinal && longitudinalKeys.find(key.c_str()) != longitudinalKeys.end()) {
+      continue;
+    }
+
     bool subToggles = aolKeys.find(key.c_str()) != aolKeys.end() ||
                       conditionalExperimentalKeys.find(key.c_str()) != conditionalExperimentalKeys.end() ||
                       experimentalModeActivationKeys.find(key.c_str()) != experimentalModeActivationKeys.end() ||
@@ -997,12 +1000,7 @@ void FrogPilotControlsPanel::hideToggles() {
                       speedLimitControllerQOLKeys.find(key.c_str()) != speedLimitControllerQOLKeys.end() ||
                       speedLimitControllerVisualsKeys.find(key.c_str()) != speedLimitControllerVisualsKeys.end() ||
                       visionTurnControlKeys.find(key.c_str()) != visionTurnControlKeys.end();
-
-    if (hasOpenpilotLongitudinal) {
-      toggle->setVisible(!subToggles);
-    } else {
-      toggle->setVisible(!(longitudinalToggles || subToggles));
-    }
+    toggle->setVisible(!subToggles);
   }
 
   update();

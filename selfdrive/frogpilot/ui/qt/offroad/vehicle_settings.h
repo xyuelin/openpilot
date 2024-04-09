@@ -39,5 +39,9 @@ private:
   Params paramsMemory{"/dev/shm/params"};
 
   bool hasOpenpilotLongitudinal;
+  bool hasSNG;
+  bool isEVCar;
+  bool isGMTruck;
+  bool isImpreza;
   bool started;
 };
