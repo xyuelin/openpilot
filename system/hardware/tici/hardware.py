@@ -131,6 +131,9 @@ class Tici(HardwareBase):
         return f.read().strip() == 'ONLINE'
     return False
 
+  def reboot(self, reason=None):
+    subprocess.check_output(["sudo", "reboot"])
+
   def soft_reboot(self):
     commands = [
       ['rm', '-f', '/tmp/safe_staging_overlay.lock'],
