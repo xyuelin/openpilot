@@ -34,7 +34,7 @@ from openpilot.selfdrive.controls.lib.vehicle_model import VehicleModel
 from openpilot.system.hardware import HARDWARE
 from openpilot.system.version import get_short_branch
 
-from openpilot.selfdrive.frogpilot.controls.lib.frogpilot_functions import CRUISING_SPEED
+from openpilot.selfdrive.frogpilot.controls.lib.frogpilot_functions import CITY_SPEED_LIMIT, CRUISING_SPEED, PROBABILITY, MovingAverageCalculator
 
 from openpilot.selfdrive.frogpilot.controls.lib.speed_limit_controller import SpeedLimitController
 
@@ -188,11 +188,11 @@ class Controls:
     self.drive_added = False
     self.fcw_random_event_triggered = False
     self.holiday_theme_alerted = False
+    self.onroad_distance_pressed = False
     self.openpilot_crashed_triggered = False
     self.random_event_triggered = False
     self.signal_check = False
     self.speed_check = False
-    self.stopped_for_light_previously = False
 
     self.crashed_timer = 0
     self.drive_distance = 0
@@ -202,6 +202,8 @@ class Controls:
     self.previous_speed_limit = 0
     self.random_event_timer = 0
     self.speed_limit_timer = 0
+
+    self.green_light_mac = MovingAverageCalculator()
 
     self.update_frogpilot_params()
 
@@ -715,10 +717,11 @@ class Controls:
 
     # decrement personality on distance button press
     if self.CP.openpilotLongitudinalControl:
-      if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
-        if not self.params_memory.get_bool("DistanceLongPressed"):
+      if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents) or self.onroad_distance_pressed:
+        if not (self.params_memory.get_bool("DistanceLongPressed") or self.params_memory.get_bool("OnroadDistanceButtonPressed")):
           self.personality = (self.personality - 1) % 3
           self.params.put_nonblocking('LongitudinalPersonality', str(self.personality))
+      self.onroad_distance_pressed = self.params_memory.get_bool("OnroadDistanceButtonPressed")
 
     return CC, lac_log
 
@@ -951,19 +954,15 @@ class Controls:
         self.max_acceleration = 0
 
     if self.green_light_alert:
-      stopped_for_light = self.sm['frogpilotPlan'].redLight and CS.standstill
+      green_light = not self.sm['frogpilotPlan'].redLight
+      green_light &= not CS.gasPressed
+      green_light &= not self.sm['longitudinalPlan'].hasLead
+      green_light &= self.driving_gear
+      green_light &= CS.standstill
 
-      if self.sm.frame % 50 == 0:
-        green_light = not stopped_for_light and self.stopped_for_light_previously
-
-        green_light &= not CS.gasPressed
-        green_light &= not self.sm['longitudinalPlan'].hasLead
-        green_light &= self.driving_gear
-
-        if green_light:
-          self.events.add(EventName.greenLight)
-
-      self.stopped_for_light_previously = stopped_for_light
+      self.green_light_mac.add_data(green_light)
+      if self.green_light_mac.get_moving_average() >= PROBABILITY:
+        self.events.add(EventName.greenLight)
 
     if self.sm.frame >= 1000 and self.holiday_themes and self.params_memory.get_int("CurrentHolidayTheme") != 0 and not self.holiday_theme_alerted:
       self.events.add(EventName.holidayActive)

@@ -96,7 +96,7 @@ def frogpilot_thread():
       if not time_validated:
         continue
 
-    if datetime.datetime.now().second == 0 or first_run or params_memory.get_bool("ManualUpdateInitiated"):
+    if not started and (datetime.datetime.now().second == 0 or first_run or params_memory.get_bool("ManualUpdateInitiated")):
       populate_models()
 
       screen_off = deviceState.screenBrightnessPercent == 0

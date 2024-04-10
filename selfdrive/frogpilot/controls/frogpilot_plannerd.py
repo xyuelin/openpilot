@@ -114,14 +114,17 @@ class FrogPilotPlannerd:
 
     stop_distance = STOP_DISTANCE + self.increased_stopping_distance
 
-    self.t_follow = self.update_t_follow(controlsState, frogpilotCarControl, radarState, v_ego, v_lead)
+    if self.CP.openpilotLongitudinalControl:
+      self.t_follow = self.update_t_follow(controlsState, frogpilotCarControl, radarState, v_ego, v_lead)
+    else:
+      self.t_follow = get_T_FOLLOW(False, 1.25, 1.45, 1.75, controlsState.personality)
 
     if self.CP.openpilotLongitudinalControl:
       self.v_cruise = self.update_v_cruise(carState, controlsState, controlsState.enabled, liveLocationKalman, modelData, road_curvature, v_cruise, v_ego)
     else:
       self.v_cruise = v_cruise
 
-    if self.conditional_experimental_mode or self.green_light_alert:
+    if self.conditional_experimental_mode and self.CP.openpilotLongitudinalControl or self.green_light_alert:
       self.cem.update(carState, controlsState.enabled, frogpilotNavigation, modelData, radarState, road_curvature, stop_distance, self.t_follow, v_ego)
 
   def update_t_follow(self, controlsState, frogpilotCarControl, radarState, v_ego, v_lead):
@@ -209,7 +212,7 @@ class FrogPilotPlannerd:
     else:
       self.vtsc_target = v_cruise
 
-    targets = [self.mtsc_target, max(self.overridden_speed, self.slc_target), self.vtsc_target]
+    targets = [self.mtsc_target, max(self.overridden_speed, self.slc_target - v_ego_diff), self.vtsc_target]
     filtered_targets = [target if target > CRUISING_SPEED else v_cruise for target in targets]
 
     return min(filtered_targets)
