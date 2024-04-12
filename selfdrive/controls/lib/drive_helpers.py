@@ -167,7 +167,7 @@ class VCruiseHelper:
       # Initial set speed
       if desired_speed_limit != 0 and frogpilot_variables.set_speed_limit:
         # If there's a known speed limit and the corresponding FP toggle is set, push it to the car
-        self.v_cruise_kph = desired_speed_limit * CV.MS_TO_KPH
+        self.v_cruise_kph = int(round(desired_speed_limit * CV.MS_TO_KPH))
       else:
         # Use fixed initial set speed from mode etc.
         self.v_cruise_kph = int(round(clip(CS.vEgo * CV.MS_TO_KPH, initial, V_CRUISE_MAX)))
