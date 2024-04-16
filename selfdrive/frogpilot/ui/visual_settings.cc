@@ -35,6 +35,7 @@ FrogPilotVisualsPanel::FrogPilotVisualsPanel(SettingsWindow *parent) : FrogPilot
     {"LeadInfo", "Lead Info and Logics", "Get detailed information about the vehicle ahead, including speed and distance, and the logic behind your following distance.", ""},
     {"PedalsOnUI", "Pedals Being Pressed", "Display which pedals are being pressed on the onroad UI below the steering wheel icon.", ""},
     {"RoadNameUI", "Road Name", "See the name of the road you're on at the bottom of your screen. Sourced from OpenStreetMap.", ""},
+    {"ShowAutoTune", "Auto Tune Values", "Display the live lateral acceleration factor and friction coefficient in the onroad UI.", ""},
 
     {"DriverCamera", "Driver Camera On Reverse", "Show the driver's camera feed when you shift to reverse.", "../assets/img_driver_face_static.png"},
 

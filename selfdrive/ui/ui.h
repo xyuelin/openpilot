@@ -222,6 +222,7 @@ typedef struct UIScene {
   bool show_driver_camera;
   bool show_slc_offset;
   bool show_slc_offset_ui;
+  bool show_tune;
   bool speed_limit_changed;
   bool speed_limit_controller;
   bool speed_limit_overridden;
@@ -239,9 +240,11 @@ typedef struct UIScene {
 
   float acceleration;
   float adjusted_cruise;
+  float friction;
   float lane_line_width;
   float lane_width_left;
   float lane_width_right;
+  float lat_accel;
   float path_edge_width;
   float path_width;
   float road_edge_width;
@@ -271,7 +274,8 @@ typedef struct UIScene {
   int steering_angle_deg;
   int stopped_equivalence;
   int wheel_icon;
-
+  
+  
   QPolygonF track_adjacent_vertices[6];
   QPolygonF track_edge_vertices;
 
