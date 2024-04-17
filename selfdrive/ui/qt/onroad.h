@@ -226,7 +226,6 @@ private:
   bool roadNameUI;
   bool showDriverCamera;
   bool showSLCOffset;
-  bool showTune;
   bool slcOverridden;
   bool speedLimitController;
   bool turnSignalLeft;
@@ -236,10 +235,8 @@ private:
 
   float cruiseAdjustment;
   float distanceConversion;
-  float friction;
   float laneWidthLeft;
   float laneWidthRight;
-  float latAccel;
   float slcSpeedLimit;
   float slcSpeedLimitOffset;
   float speedConversion;
