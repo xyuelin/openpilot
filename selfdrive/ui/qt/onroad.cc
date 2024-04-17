@@ -1675,8 +1675,8 @@ void AnnotatedCameraWidget::drawLeadInfo(QPainter &p) {
     p.setFont(InterFont(30, QFont::DemiBold));
     p.setRenderHint(QPainter::TextAntialiasing);
 
-    QRect tuningRectAdj = tuningRect.adjusted(0, 27, 0, 27);
-    int tuneTextBaseLine = tuningRectAdj.y() + p.fontMetrics().height() / 2 - p.fontMetrics().descent() - 8;
+    QRect tuningRectAdj = tuningRect.adjusted(0, 37, 0, 37);
+    int tuneTextBaseLine = tuningRectAdj.y() + p.fontMetrics().height() / 2 - p.fontMetrics().descent() - 20;
 
     QString latAccelText = (mapOpen ? "Lat. Accel.: " : "Lateral Acceleration: ") + QString::number(latAccel, 'f', 3);
     QString frictionText = (mapOpen ? " | Fric.: " : " | Friction: ")  + QString::number(friction, 'f', 3);
