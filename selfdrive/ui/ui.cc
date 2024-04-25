@@ -296,6 +296,11 @@ static void update_state(UIState *s) {
     float scale = (cam_state.getSensor() == cereal::FrameData::ImageSensor::AR0231) ? 6.0f : 1.0f;
     scene.light_sensor = std::max(100.0f - scale * cam_state.getExposureValPercent(), 0.0f);
   }
+  if (sm.updated("liveTorqueParameters")) {
+    auto torque_params = sm["liveTorqueParameters"].getLiveTorqueParameters();
+    scene.lat_accel = torque_params.getLatAccelFactorFiltered();
+    scene.friction = torque_params.getFrictionCoefficientFiltered();
+  }
   scene.started = sm["deviceState"].getDeviceState().getStarted() && scene.ignition;
 
   scene.world_objects_visible = scene.world_objects_visible ||
@@ -338,6 +343,7 @@ void ui_update_frogpilot_params(UIState *s) {
   scene.use_si = scene.lead_info && params.getBool("UseSI");
   scene.pedals_on_ui = custom_onroad_ui && params.getBool("PedalsOnUI");
   scene.road_name_ui = custom_onroad_ui && params.getBool("RoadNameUI");
+  scene.show_tune = custom_onroad_ui && params.getBool("ShowAutoTune");
 
   bool custom_theme = params.getBool("CustomTheme");
   scene.custom_colors = custom_theme ? params.getInt("CustomColors") : 0;
@@ -434,7 +440,7 @@ UIState::UIState(QObject *parent) : QObject(parent) {
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "liveLocationKalman", "driverStateV2",
     "wideRoadCameraState", "managerState", "navInstruction", "navRoute", "uiPlan",
-    "frogpilotCarControl", "frogpilotDeviceState", "frogpilotPlan",
+    "frogpilotCarControl", "frogpilotDeviceState", "frogpilotPlan", "liveTorqueParameters",
   });
 
   Params params;

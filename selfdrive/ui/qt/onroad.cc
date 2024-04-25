@@ -273,6 +273,25 @@ void OnroadWindow::paintEvent(QPaintEvent *event) {
 
     update();
   }
+  
+  // Draw auto tune parameters
+  if (scene.show_tune) {
+    QString tuneDisplayString = QString("Lateral Acceleration: %1 | Friction: %2")
+      .arg(scene.lat_accel, 0, 'f', 3))
+      .arg(scene.friction, 0, 'f', 3));
+
+    p.setFont(InterFont(30, QFont::DemiBold));
+    p.setRenderHint(QPainter::TextAntialiasing);
+    p.setPen(Qt::white);
+
+    QRect currentRect = rect();
+    int tuneWidth = p.fontMetrics().horizontalAdvance(tuneDisplayString);
+    int tuneX = (currentRect.width() - tuneWidth) / 2;
+    int tuneY = currentRect.top() + 27;
+
+    p.drawText(tuneX, tuneY, tuneDisplayString);
+    update();
+  }
 }
 
 void OnroadWindow::updateFPSCounter() {
